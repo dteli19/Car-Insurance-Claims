@@ -23,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-DATA_PATH = Path("data/car_insurance.csv")   # keep this file in your repo
+DATA_PATH = Path("car_insurance.csv")   # keep this file in your repo
 DEP_VAR = "outcome"                           # Colab’s dependent variable name
 
 @st.cache_data(show_spinner=False)
