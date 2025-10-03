@@ -1,30 +1,25 @@
-# app.py — Best Single Feature by Accuracy (Logistic Regression, full data, no target detection)
+# app.py — Best Single Feature by Accuracy using statsmodels Logit (matches Colab loop)
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+import statsmodels.api as sm
+from statsmodels.formula.api import logit
 
-# -----------------------------
-# Settings
-# -----------------------------
-st.set_page_config(page_title="Car Insurance — Best Feature", page_icon="🚗", layout="wide")
-st.title("🚗 Car Insurance — Best Single Feature (Accuracy)")
-st.caption("Context • Objective • Data • Actions • Observations • Results")
+# ---------------------------------------------------------
+# Page setup
+# ---------------------------------------------------------
+st.set_page_config(page_title="Best Single Feature (Logit)", page_icon="📈", layout="wide")
+st.title("📈 Best Single Feature — Logistic Regression (Full Data)")
+st.caption("Replicates the Colab loop: outcome ~ feature → pred_table() → Accuracy")
 
-DATA_PATH = Path("data/car_insurance.csv")
-TARGET_COL = "Response"  # <-- set this to your Colab target column (no auto-detection)
+# ---------------------------------------------------------
+# Data loading (fixed file with uploader fallback)
+# ---------------------------------------------------------
+DATA_PATH = Path("data/car_insurance.csv")   # adjust if needed
+DEP_VAR = "outcome"                           # <- Colab’s dependent variable name
 
-# -----------------------------
-# Load data
-# -----------------------------
 @st.cache_data(show_spinner=False)
 def read_csv_forgiving(src):
     try:
@@ -40,30 +35,27 @@ def load_data():
         df = read_csv_forgiving(DATA_PATH)
         src = f"`{DATA_PATH}`"
     else:
-        up = st.file_uploader("Upload a CSV", type=["csv"])
+        up = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
         if not up:
-            st.info("Add `data/car_insurance.csv` or upload your dataset to proceed.")
+            st.info("Add a dataset at data/car_insurance.csv or upload a CSV.")
             st.stop()
         df = read_csv_forgiving(up)
         src = "uploaded file"
-    df.columns = df.columns.str.strip().str.replace(r"\s+", "_", regex=True)
+    # Keep original column names for formula; also create a normalized alias for display
     return df, src
 
 df, src = load_data()
 st.success(f"Loaded dataset from {src}")
 
-# -----------------------------
-# Context & Objective
-# -----------------------------
+# ---------------------------------------------------------
+# Context / Objective / About the Data (brief)
+# ---------------------------------------------------------
 st.header("Context")
-st.markdown("Identify which **single feature** best predicts the target in a car insurance dataset.")
+st.markdown("Identify which **single variable** best predicts the binary **outcome** using a simple **Logit** model per feature.")
 
 st.header("Objective")
-st.markdown("Fit **Logistic Regression on full data** (no train/test) per-feature and choose the **best by Accuracy**.")
+st.markdown("For each candidate feature `X`, fit `logit('outcome ~ X')` on **full data** and compute **Accuracy** from `pred_table()`.")
 
-# -----------------------------
-# About the Data
-# -----------------------------
 st.header("About the Data")
 c0, c1 = st.columns([2, 1])
 with c0:
@@ -75,126 +67,129 @@ with c1:
     st.metric("Columns", df.shape[1])
     st.metric("Overall Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
 
-num_cols_all = df.select_dtypes(include=[np.number]).columns.tolist()
-st.subheader("Summary (Numeric Features)")
-if num_cols_all:
-    desc = df[num_cols_all].agg(["count","mean","median","std","min","max"]).T
-    q = df[num_cols_all].quantile([0.25,0.75])
-    desc["q1"] = q.loc[0.25].values
-    desc["q3"] = q.loc[0.75].values
-    desc["iqr"] = desc["q3"] - desc["q1"]
-    desc["missing_%"] = (df[num_cols_all].isna().mean()*100).values
-    st.dataframe(desc[["count","mean","median","std","min","q1","q3","iqr","max","missing_%"]].round(3),
-                 use_container_width=True)
-else:
-    st.info("No numeric columns found.")
+# ---------------------------------------------------------
+# Guard rails
+# ---------------------------------------------------------
+if DEP_VAR not in df.columns:
+    st.error(f"Dependent variable `{DEP_VAR}` not found. Rename your target column to `{DEP_VAR}` (as in Colab) or change DEP_VAR in app.py.")
+    st.stop()
 
-# -----------------------------
+# Ensure outcome is binary-like (0/1). If it’s 'Yes/No' etc, try to map automatically.
+y_raw = df[DEP_VAR]
+y_mapped = y_raw.copy()
+
+if y_raw.dropna().dtype == object:
+    # attempt mapping of common labels
+    lower = y_raw.str.lower()
+    if set(lower.dropna().unique()) <= {"yes", "no"}:
+        y_mapped = lower.map({"no": 0, "yes": 1})
+    elif set(lower.dropna().unique()) <= {"true", "false"}:
+        y_mapped = lower.map({"false": 0, "true": 1})
+    else:
+        # leave as-is; statsmodels can handle if already 0/1 strings
+        pass
+
+df = df.copy()
+df[DEP_VAR] = y_mapped
+
+# ---------------------------------------------------------
 # Actions — Data Preparation
-# -----------------------------
+# ---------------------------------------------------------
 st.header("Actions — Data Preparation")
 st.markdown("""
-1. Normalize headers (trim, underscores).  
-2. Drop exact duplicate rows.  
-3. For each single feature:  
-   - Numeric → `StandardScaler`  
-   - Categorical → `OneHotEncoder(handle_unknown="ignore")`  
-   - Model → `LogisticRegression(max_iter=1000)` on **full data** (resubstitution).
+- Keep column names as-is for the statsmodels formula interface.  
+- Drop exact duplicate rows.  
+- For each feature `col` (excluding `outcome`):  
+  1) Try `logit("outcome ~ col", data=df).fit()`  
+  2) If it fails (categorical), retry with `logit("outcome ~ C(col)", data=df).fit()`  
+  3) Use `model.pred_table()` to extract **Accuracy** at threshold 0.5.  
 """)
-before = len(df)
+
 df_clean = df.drop_duplicates().copy()
-st.caption(f"Removed {before - len(df_clean)} duplicate rows.")
+before, after = len(df), len(df_clean)
+st.caption(f"Removed {before - after} duplicate rows (kept {after}).")
 
-# -----------------------------
-# Observations (light)
-# -----------------------------
-st.header("Observations")
-obs = []
-if num_cols_all:
-    skew = df_clean[num_cols_all].skew(numeric_only=True).sort_values(ascending=False)
-    skewed = [f"{c} (skew={v:.2f})" for c, v in skew.head(3).items() if v > 1.0]
-    if skewed: obs.append("Right-skew detected: " + ", ".join(skewed) + ".")
-for col in num_cols_all[:5]:
-    s = df_clean[col].dropna()
-    if len(s) > 0:
-        q1, q3 = s.quantile(0.25), s.quantile(0.75)
-        obs.append(f"**{col}** typically spans **{q1:,.2f}–{q3:,.2f}** (IQR).")
-for o in (obs or ["- No notable skew/range signals detected."]):
-    st.markdown(f"- {o}")
-
-# -----------------------------
-# Results — Best Single Feature by Accuracy
-# -----------------------------
+# ---------------------------------------------------------
+# Results — loop exactly like Colab
+# ---------------------------------------------------------
 st.header("Results — Best Single Feature (Accuracy)")
 
-if TARGET_COL not in df_clean.columns:
-    st.error(f"Target column `{TARGET_COL}` not found. Set `TARGET_COL` near the top of app.py to your Colab target.")
-    st.stop()
+# Candidate features: all columns except the dependent var
+features = [c for c in df_clean.columns if c != DEP_VAR]
 
-y = df_clean[TARGET_COL].dropna()
-X = df_clean.loc[y.index].drop(columns=[TARGET_COL])
+models = []
+accuracies = []
+used_features = []
 
-# drop constant/empty columns
-def is_constant(s: pd.Series) -> bool:
-    s_non_null = s.dropna()
-    return s_non_null.nunique() <= 1
+for col in features:
+    # Drop rows with NA in outcome or this feature
+    sub = df_clean[[DEP_VAR, col]].dropna().copy()
+    if sub.empty or sub[DEP_VAR].dropna().nunique() < 2:
+        # cannot fit a logit if outcome has <2 classes after dropping NA
+        continue
 
-features = [c for c in X.columns if not is_constant(X[c])]
-
-if not features:
-    st.error("No valid feature columns available after cleaning.")
-    st.stop()
-
-num_cols = X[features].select_dtypes(include=[np.number]).columns.tolist()
-cat_cols = [c for c in features if c not in num_cols]
-
-def eval_feature(feat: str):
-    Xi = X[[feat]]
-    if feat in num_cols:
-        pre = ColumnTransformer([("num", StandardScaler(), [feat])], remainder="drop")
-    else:
-        pre = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), [feat])], remainder="drop")
-    pipe = Pipeline([("preprocess", pre), ("clf", LogisticRegression(max_iter=1000))])
-    pipe.fit(Xi, y)
-    y_pred = pipe.predict(Xi)
-    return accuracy_score(y, y_pred)
-
-results = []
-for f in features:
+    # Try numeric/formula directly first
+    formula = f"{DEP_VAR} ~ {col}"
+    model = None
     try:
-        acc = eval_feature(f)
-        results.append({"feature": f, "type": "numeric" if f in num_cols else "categorical", "accuracy": acc})
+        model = logit(formula, data=sub).fit(disp=False)
     except Exception:
-        results.append({"feature": f, "type": "error", "accuracy": np.nan})
+        # Retry as categorical feature
+        try:
+            formula = f"{DEP_VAR} ~ C({col})"
+            model = logit(formula, data=sub).fit(disp=False)
+        except Exception:
+            model = None
 
-res_df = pd.DataFrame(results).sort_values("accuracy", ascending=False).reset_index(drop=True)
+    if model is None:
+        continue
 
-if res_df.empty or res_df["accuracy"].isna().all():
-    st.error("Unable to compute accuracy for any feature. Check target and feature columns.")
+    # pred_table() returns [[tn, fp],[fn, tp]] at default threshold 0.5
+    try:
+        conf_matrix = model.pred_table()
+        tn = conf_matrix[0, 0]
+        fp = conf_matrix[0, 1]
+        fn = conf_matrix[1, 0]
+        tp = conf_matrix[1, 1]
+        acc = (tn + tp) / (tn + fp + fn + tp)
+    except Exception:
+        acc = np.nan
+
+    models.append(model)
+    accuracies.append(acc)
+    used_features.append(col)
+
+# Build results frame
+if not accuracies:
+    st.error("Could not fit a valid Logit for any single feature. Check that `outcome` is binary-like and features have variation.")
     st.stop()
 
-best = res_df.iloc[0]
-st.subheader("Best Feature")
-st.markdown(
-    f"- **Feature:** `{best['feature']}`  \n"
-    f"- **Type:** {best['type']}  \n"
-    f"- **Accuracy:** **{best['accuracy']:.3f}**"
+best_idx = int(np.nanargmax(accuracies))
+best_feature = used_features[best_idx]
+best_accuracy = float(accuracies[best_idx])
+
+best_feature_df = pd.DataFrame(
+    {"best_feature": [best_feature], "best_accuracy": [best_accuracy]}
 )
 
-# Ranked table
-st.subheader("All Features — Ranked by Accuracy")
-disp = res_df.copy().round({"accuracy": 3})
-styler = disp.style.bar(subset=["accuracy"], color="#76b7ff").hide(axis="index")
-st.dataframe(styler, use_container_width=True)
+st.subheader("Best Feature")
+st.dataframe(best_feature_df.round(3), use_container_width=True)
 
-# Optional: small bar chart of top N
-top_n = min(10, len(disp))
+# Full ranking
+rank_df = pd.DataFrame({"feature": used_features, "accuracy": accuracies})
+rank_df = rank_df.sort_values("accuracy", ascending=False).reset_index(drop=True)
+
+st.subheader("All Features — Ranked by Accuracy (Logit, full data)")
+st.dataframe(rank_df.round(3), use_container_width=True)
+
+# Optional small bar chart (top 10)
+top_n = min(10, len(rank_df))
 fig, ax = plt.subplots(figsize=(7, max(3, int(top_n*0.4))))
-plot_df = disp.head(top_n).sort_values("accuracy")
+plot_df = rank_df.head(top_n).sort_values("accuracy")
 ax.barh(plot_df["feature"], plot_df["accuracy"])
-ax.set_xlabel("Accuracy")
+ax.set_xlabel("Accuracy (pred_table threshold 0.5)")
 ax.set_ylabel("")
 st.pyplot(fig)
 
 st.markdown("---")
-st.caption("Full-data (resubstitution) Logistic Regression. Adjust TARGET_COL to match your Colab target.")
+st.caption("This app mirrors the Colab loop: per-feature Logit on full data, accuracy via pred_table().")
