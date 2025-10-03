@@ -192,49 +192,12 @@ df[DEP_VAR] = y_mapped
 # Actions — Data Preparation
 # ---------------------------------------------------------
 st.header("Actions — Data Preparation")
-st.subheader("Missing Data Handling (as in Colab)")
-
-# Columns we want to impute (mean)
-impute_cols = ["credit_score", "annual_mileage"]
-
-# Check which exist in current dataframe
-present = [c for c in impute_cols if c in df_clean.columns]
-missing_cols = [c for c in impute_cols if c not in df_clean.columns]
-
-# Show before stats
-before_nulls = df_clean[present].isna().sum().rename("null_count_before").to_frame()
-before_means = df_clean[present].mean(numeric_only=True).rename("mean_before").to_frame()
-before = before_nulls.join(before_means, how="left")
-
-st.markdown("**Before Imputation**")
-st.dataframe(before.astype({"null_count_before": "int"}), use_container_width=True)
-
-# Impute (mean) — same as Colab
-for c in present:
-    df_clean[c].fillna(df_clean[c].mean(), inplace=True)
-
-# Show after stats
-after_nulls = df_clean[present].isna().sum().rename("null_count_after").to_frame()
-after_means = df_clean[present].mean(numeric_only=True).rename("mean_after").to_frame()
-after = after_nulls.join(after_means, how="left")
-
-st.markdown("**After Imputation (Mean)**")
-st.dataframe(after.astype({"null_count_after": "int"}), use_container_width=True)
-
-# FYI if any expected columns are missing
-if missing_cols:
-    st.info(f"Note: The following expected columns were not found and were not imputed: {', '.join(missing_cols)}")
-
-
-
-
 st.markdown("""
-- Keep column names as-is for the statsmodels formula interface.  
-- Drop exact duplicate rows.  
-- For each feature `col` (excluding `outcome`):  
-  1) Try `logit("outcome ~ col", data=df).fit()`  
-  2) If it fails (categorical), retry with `logit("outcome ~ C(col)", data=df).fit()`  
-  3) Use `model.pred_table()` to extract **Accuracy** at threshold 0.5.  
+- Assessed nulls across all columns, with focus on `credit_score` and `annual_mileage`.
+- Imputed missing values for these **numeric** fields using their **column means** to preserve sample size:
+  - `credit_score` ← mean(`credit_score`)
+  - `annual_mileage` ← mean(`annual_mileage`)
+- No rows were dropped for missingness; other columns were left unchanged.
 """)
 
 df_clean = df.drop_duplicates().copy()
@@ -242,7 +205,7 @@ before, after = len(df), len(df_clean)
 st.caption(f"Removed {before - after} duplicate rows (kept {after}).")
 
 # ---------------------------------------------------------
-# Results — loop exactly like Colab
+# Results 
 # ---------------------------------------------------------
 st.header("Results — Best Single Feature (Accuracy)")
 
