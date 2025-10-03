@@ -193,64 +193,61 @@ df[DEP_VAR] = y_mapped
 # ---------------------------------------------------------
 st.header("Actions — Data Preparation")
 st.markdown("""
-- Assessed nulls across all columns, with focus on `credit_score` and `annual_mileage`.
-- Imputed missing values for these **numeric** fields using their **column means** to preserve sample size:
-  - `credit_score` ← mean(`credit_score`)
-  - `annual_mileage` ← mean(`annual_mileage`)
-- No rows were dropped for missingness; other columns were left unchanged.
+- Removed duplicate rows.  
+- Excluded non-informative identifiers from the feature set: `id`.  
+- Excluded the dependent variable from the feature set: `outcome`.  
+- Imputed missing values for numeric fields using column means:  
+  - `credit_score` ← mean(`credit_score`)  
+  - `annual_mileage` ← mean(`annual_mileage`)  
 """)
 
+# Clean duplicates
 df_clean = df.drop_duplicates().copy()
 before, after = len(df), len(df_clean)
 st.caption(f"Removed {before - after} duplicate rows (kept {after}).")
 
+# Impute missing values
+for col in ["credit_score", "annual_mileage"]:
+    if col in df_clean.columns:
+        df_clean[col].fillna(df_clean[col].mean(), inplace=True)
+
+# Drop non-informative columns from feature set
+ID_COLS = ["id"]
+drop_from_features = [DEP_VAR] + [c for c in ID_COLS if c in df_clean.columns]
+df_model = df_clean.drop(columns=drop_from_features, errors="ignore")
+
+st.caption(
+    "Dropped from feature set: "
+    + (", ".join([c for c in drop_from_features if c in df_clean.columns]) or "(none)")
+)
+
 # ---------------------------------------------------------
 # Results — Best Single Feature basis Accuracy 
 # ---------------------------------------------------------
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from statsmodels.formula.api import logit
-
 st.header("Results — Best Single Feature basis Accuracy")
 
-# Candidate features: all columns except the dependent var
-features = [c for c in df_clean.columns if c != DEP_VAR]
-
-models = []
-accuracies = []
-used_features = []
+features = list(df_model.columns)   # Only model features left
+models, accuracies, used_features = [], [], []
 
 for col in features:
-    # Drop rows with NA in outcome or this feature
-    sub = df_clean[[DEP_VAR, col]].dropna().copy()
-    if sub.empty or sub[DEP_VAR].dropna().nunique() < 2:
-        # cannot fit a logit if outcome has < 2 classes after dropping NA
+    sub = pd.concat([df_clean[[DEP_VAR]], df_model[[col]]], axis=1).dropna().copy()
+    if sub.empty or sub[DEP_VAR].nunique() < 2:
         continue
 
-    # Try numeric/formula directly first
-    formula = f"{DEP_VAR} ~ {col}"
     model = None
     try:
-        model = logit(formula, data=sub).fit(disp=False)
+        model = logit(f"{DEP_VAR} ~ {col}", data=sub).fit(disp=False)
     except Exception:
-        # Retry as categorical feature
         try:
-            formula = f"{DEP_VAR} ~ C({col})"
-            model = logit(formula, data=sub).fit(disp=False)
+            model = logit(f"{DEP_VAR} ~ C({col})", data=sub).fit(disp=False)
         except Exception:
             model = None
-
     if model is None:
         continue
 
-    # pred_table() returns [[tn, fp],[fn, tp]] at default threshold 0.5
     try:
-        conf_matrix = model.pred_table()
-        tn = conf_matrix[0, 0]
-        fp = conf_matrix[0, 1]
-        fn = conf_matrix[1, 0]
-        tp = conf_matrix[1, 1]
+        cm = model.pred_table()
+        tn, fp, fn, tp = cm[0, 0], cm[0, 1], cm[1, 0], cm[1, 1]
         acc = (tn + tp) / (tn + fp + fn + tp)
     except Exception:
         acc = np.nan
@@ -259,92 +256,49 @@ for col in features:
     accuracies.append(acc)
     used_features.append(col)
 
-# Build results frame
 if not accuracies:
-    st.error("Could not fit a valid Logit for any single feature. Check that `outcome` is binary-like and features have variation.")
+    st.error("Could not fit a valid Logit for any feature.")
     st.stop()
 
+# Best feature
 best_idx = int(np.nanargmax(accuracies))
 best_feature = used_features[best_idx]
 best_accuracy = float(accuracies[best_idx])
 
-best_feature_df = pd.DataFrame(
-    {"best_feature": [best_feature], "best_accuracy": [best_accuracy]}
-)
-
-# ---------- Pretty "Best Feature" card + compact table ----------
-def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
-    st.markdown(
-        f"""
-        <div style="
-            border-radius:16px;
-            padding:16px 18px;
-            background:{bg};
-            color:{fg};
-            box-shadow: 0 6px 20px rgba(0,0,0,0.10);
-            border: 1px solid rgba(255,255,255,0.12);
-            ">
-            <div style="font-size:13px; opacity:0.9; letter-spacing:.4px; text-transform:uppercase;">
-                {title}
-            </div>
-            <div style="font-size:30px; font-weight:700; margin-top:6px;">
-                {value}
-            </div>
-            <div style="font-size:24px; opacity:100; margin-top:4px;">
-                {sub or ""}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
 highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: {best_accuracy:.3f}", bg="#1f6feb")
 
-# ---------- Full ranking (Feature • Accuracy) ----------
+# ---------- Full ranking (lighter colors) ----------
 rank_df = pd.DataFrame({"feature": used_features, "accuracy": accuracies})
 rank_df = rank_df.sort_values("accuracy", ascending=False).reset_index(drop=True)
 
-st.subheader("All Features — Ranked by Accuracy (Logit, full data)")
+st.subheader("All Features — Ranked by Accuracy")
 
-# Display copy
-rank_disp = (
-    rank_df.copy()
-      .rename(columns={"feature": "Feature", "accuracy": "Accuracy"})
-)
-
-# Ensure numeric for styling
-rank_disp["Accuracy"] = pd.to_numeric(rank_disp["Accuracy"], errors="coerce")
-# Add a marker for best (first row after sorting)
-best_feature = rank_disp.iloc[0]["Feature"]
+rank_disp = rank_df.copy().rename(columns={"feature": "Feature", "accuracy": "Accuracy"})
 rank_disp[""] = np.where(rank_disp["Feature"] == best_feature, "⭐", "")
-rank_disp = rank_disp[["", "Feature", "Accuracy"]]
+rank_disp = rank_disp[["", "Feature", "Accuracy"]].round(3)
 
-# --- Styling helpers ---
-def zebra(data, even="#0f172a", odd="#111827", font="#e5e7eb"):
-    """Alternate row background colors (zebra)."""
+def zebra_light(data, even="#f9fafb", odd="#ffffff", font="#111827"):
     styles = pd.DataFrame("", index=data.index, columns=data.columns)
     even_mask = (np.arange(len(data)) % 2 == 0)
     styles.loc[even_mask, :] = f"background-color: {even}; color: {font};"
     styles.loc[~even_mask, :] = f"background-color: {odd}; color: {font};"
     return styles
 
-def highlight_best_row(data, best_value, color="#065f46", font="white"):
-    """Highlight the row where Feature == best_value."""
+def highlight_best_row(data, best_value, color="#d1fae5", font="#065f46"):
     styles = pd.DataFrame("", index=data.index, columns=data.columns)
     if "Feature" in data.columns:
         mask = data["Feature"] == best_value
-        styles.loc[mask, :] = f"background-color: {color}; color: {font};"
+        styles.loc[mask, :] = f"background-color: {color}; color: {font}; font-weight:600;"
     return styles
 
 try:
     rank_sty = (
         rank_disp.style
-          # Base table look
           .set_table_styles([
               {"selector": "th", "props": [
                   ("text-align", "left"),
-                  ("background", "#0b1220"),
-                  ("color", "white"),
+                  ("background", "#eef2ff"),
+                  ("color", "#111827"),
                   ("padding", "8px 10px"),
                   ("border", "0px")
               ]},
@@ -355,18 +309,14 @@ try:
           ])
           .hide(axis="index")
           .format({"Accuracy": "{:.3f}"})
-          # In-cell bar for Accuracy
-          .bar(subset=["Accuracy"], color="#76b7ff", vmin=0, vmax=1)
-          # Zebra rows then override best row style
-          .apply(zebra, axis=None)
+          .bar(subset=["Accuracy"], color="#93c5fd", vmin=0, vmax=1)
+          .apply(zebra_light, axis=None)
           .apply(lambda d: highlight_best_row(d, best_feature), axis=None)
     )
     st.dataframe(rank_sty, use_container_width=True)
 except Exception:
-    # Fallback: plain dataframe with basic formatting
     st.dataframe(rank_disp.round({"Accuracy": 3}), use_container_width=True)
 
-# Download button
 st.download_button(
     "⬇️ Download feature accuracies (CSV)",
     data=rank_df.to_csv(index=False),
@@ -374,28 +324,25 @@ st.download_button(
     mime="text/csv",
 )
 
-# ---------- Accuracy bar chart (Top N) ----------
+# ---------- Accuracy bar chart ----------
 st.subheader("Accuracy — Top Features")
 max_n = min(20, len(rank_df))
-top_n = st.slider("Show top N features", min_value=5, max_value=max_n, value=min(10, max_n), step=1)
+top_n = st.slider("Show top N features", 5, max_n, min(10, max_n), 1)
 
 plot_df = rank_df.head(top_n).sort_values("accuracy")
 fig, ax = plt.subplots(figsize=(8, max(3.5, 0.45*top_n)))
-ax.barh(plot_df["feature"], plot_df["accuracy"])
+bars = ax.barh(plot_df["Feature"], plot_df["Accuracy"], color="#93c5fd")
 
 ax.set_xlabel("Accuracy (pred_table threshold 0.5)")
-ax.set_ylabel("")
 ax.set_xlim(0, 1)
 ax.grid(axis="x", linestyle=":", alpha=0.35)
 
-# Annotate values
-for i, (feat, acc) in enumerate(zip(plot_df["feature"], plot_df["accuracy"])):
-    ax.text(acc + 0.01, i, f"{acc:.3f}", va="center")
+for i, (feat, acc) in enumerate(zip(plot_df["Feature"], plot_df["Accuracy"])):
+    ax.text(acc + 0.01, i, f"{acc:.3f}", va="center", color="#374151")
 
-# Outline the best if visible in the plot
-if best_feature in plot_df["feature"].values:
-    idx = plot_df.index[plot_df["feature"] == best_feature][0]
-    ax.barh([best_feature], [plot_df.loc[idx, "accuracy"]],
-            edgecolor="#0b1220", linewidth=2)
+if best_feature in plot_df["Feature"].values:
+    idx = plot_df.index[plot_df["Feature"] == best_feature][0]
+    bars[list(plot_df.index).index(idx)].set_edgecolor("#2563eb")
+    bars[list(plot_df.index).index(idx)].set_linewidth(2)
 
 st.pyplot(fig)
