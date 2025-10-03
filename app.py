@@ -278,4 +278,58 @@ if not res_df.empty and res_df["accuracy"].notna().any():
     st.markdown(
         f"- **Feature:** `{best_row['feature']}`  \n"
         f"- **Type:** {best_row['type']}  \n"
-        f"- **Ac**
+        f"- **Accuracy:** **{best_row['accuracy']:.3f}**  \n"
+        f"- **F1:** {'' if np.isnan(best_row['f1']) else f'{best_row['f1']:.3f}'}  \n"
+        f"- **ROC AUC:** {'' if np.isnan(best_row['auc']) else f'{best_row['auc']:.3f}'}"
+    )
+else:
+    st.info("Could not compute feature-wise metrics. Check the target and feature columns.")
+
+# Show full ranking table (styled)
+st.subheader("Feature Ranking by Accuracy")
+disp = res_df.copy().reset_index(drop=True).round({"accuracy": 3, "f1": 3, "auc": 3})
+styler = (
+    disp.style
+    .bar(subset=["accuracy"], color="#66b3ff")
+    .background_gradient(subset=["auc"], cmap="Greens")
+    .hide(axis="index")
+)
+st.dataframe(styler, use_container_width=True)
+
+# Optional: confusion matrix for best feature model
+if not res_df.empty and res_df["accuracy"].notna().any():
+    # retrain best single-feature model to show CM
+    best_feat = best_row["feature"]
+    st.subheader(f"Confusion Matrix — Best Feature: {best_feat}")
+
+    Xb = df_clean[[best_feat]]
+
+    if best_feat in num_cols:
+        preb = ColumnTransformer(
+            transformers=[("num", StandardScaler(), [best_feat])],
+            remainder="drop",
+        )
+    else:
+        preb = ColumnTransformer(
+            transformers=[("cat", OneHotEncoder(handle_unknown="ignore"), [best_feat])],
+            remainder="drop",
+        )
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        Xb, y, test_size=test_size, random_state=42, stratify=stratify_arg
+    )
+    modelb = Pipeline(steps=[("preprocess", preb), ("clf", LogisticRegression(max_iter=1000))])
+    modelb.fit(X_train, y_train)
+    y_pred_b = modelb.predict(X_test)
+
+    cm = confusion_matrix(y_test, y_pred_b)
+    fig, ax = plt.subplots()
+    sns.heatmap(cm, annot=True, fmt="d", cbar=False, ax=ax)
+    ax.set_xlabel("Predicted"); ax.set_ylabel("Actual"); ax.set_title(f"Confusion Matrix ({best_feat})")
+    st.pyplot(fig)
+
+# ------------------------------------------------------------------------------
+# Footer
+# ------------------------------------------------------------------------------
+st.markdown("---")
+st.caption("This report identifies the best single predictive feature by Accuracy (with F1/AUC context).")
