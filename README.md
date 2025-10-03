@@ -48,10 +48,10 @@ Key columns include:
 - A **ranking table and bar chart** are included in the Streamlit app to explore all features by accuracy.  
 
 📷 **Results Preview**  
-![Feature Ranking Table](images/ranking_table.png)  
+![Feature Ranking Table](ranking_table.png)  
 *All features ranked by accuracy in a styled table.*  
 
-![Accuracy Bar Chart](images/bar_chart.png)  
+![Accuracy Bar Chart](bar_chart.png)  
 *Top features visualized for quick comparison.*  
 
 ## 🔍 Key Insights
