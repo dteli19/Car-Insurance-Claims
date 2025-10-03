@@ -17,36 +17,33 @@ st.set_page_config(page_title="Best Single Feature", page_icon="📈", layout="w
 st.title("🚗 Car Insurance Risk Factors — Logistic Regression Feature Benchmark")
 
 # ---------------------------------------------------------
-# Data loading (fixed file with uploader fallback)
+# Data loading (hardcoded path only — no uploader)
 # ---------------------------------------------------------
-DATA_PATH = Path("data/car_insurance.csv")   # adjust if needed
-DEP_VAR = "outcome"                           # <- Colab’s dependent variable name
+from pathlib import Path
+import pandas as pd
+import streamlit as st
+
+DATA_PATH = Path("data/car_insurance.csv")   # keep this file in your repo
+DEP_VAR = "outcome"                           # Colab’s dependent variable name
 
 @st.cache_data(show_spinner=False)
-def read_csv_forgiving(src):
+def read_csv_forgiving(p: Path) -> pd.DataFrame:
+    # Try common variants to survive odd encodings/delimiters
     try:
-        return pd.read_csv(src)
+        return pd.read_csv(p)
     except Exception:
         try:
-            return pd.read_csv(src, engine="python")
+            return pd.read_csv(p, engine="python")
         except Exception:
-            return pd.read_csv(src, sep=";", engine="python")
+            return pd.read_csv(p, sep=";", engine="python")
 
-def load_data():
-    if DATA_PATH.exists():
-        df = read_csv_forgiving(DATA_PATH)
-        src = f"`{DATA_PATH}`"
-    else:
-        up = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
-        if not up:
-            st.info("Add a dataset at data/car_insurance.csv or upload a CSV.")
-            st.stop()
-        df = read_csv_forgiving(up)
-        src = "uploaded file"
-    # Keep original column names for formula; also create a normalized alias for display
-    return df, src
+# Load strictly from disk; no uploader fallback
+if not DATA_PATH.exists():
+    st.error(f"CSV not found at `{DATA_PATH}`. Please add the file to your repo and redeploy.")
+    st.stop()
 
-df, src = load_data()
+df = read_csv_forgiving(DATA_PATH)
+src = f"`{DATA_PATH}`"
 st.success(f"Loaded dataset from {src}")
 
 # ---------------------------------------------------------
