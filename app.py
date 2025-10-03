@@ -64,17 +64,31 @@ with st.expander("Context & Problem Statement", expanded=True):
     They have supplied their customer data as a csv file called car_insurance.csv, along with a table detailing the column names and descriptions below.
     """)
 
-with st.expander("📑 Dataset (concise)", expanded=True):
-    st.markdown("""
-- **id**: client ID • **age**: 0=16–25, 1=26–39, 2=40–64, 3=65+ • **gender**: 0=F, 1=M  
-- **driving_experience**: 0=0–9, 1=10–19, 2=20–29, 3=30+ • **education**: 0=None, 1=HS, 2=Univ  
-- **income**: 0=Poverty, 1=Working, 2=Middle, 3=Upper • **credit_score**: 0–1  
-- **vehicle_ownership**: 0=Financing, 1=Owns • **vehicle_year**: 0=<2015, 1=≥2015  
-- **married**: 0=No, 1=Yes • **children**: count • **postal_code**: code  
-- **annual_mileage**: miles/yr • **vehicle_type**: 0=Sedan, 1=Sports  
-- **speeding_violations**: count • **duis**: count • **past_accidents**: count  
-- **outcome**: 0=No claim, 1=Claim
-""")
+schema_rows = [
+    ("id", "client ID"),
+    ("age", "0=16–25, 1=26–39, 2=40–64, 3=65+"),
+    ("gender", "0=F, 1=M"),
+    ("driving_experience", "0=0–9, 1=10–19, 2=20–29, 3=30+"),
+    ("education", "0=None, 1=HS, 2=Univ"),
+    ("income", "0=Poverty, 1=Working, 2=Middle, 3=Upper"),
+    ("credit_score", "0–1"),
+    ("vehicle_ownership", "0=Financing, 1=Owns"),
+    ("vehicle_year", "0=<2015, 1=≥2015"),
+    ("married", "0=No, 1=Yes"),
+    ("children", "count"),
+    ("postal_code", "code"),
+    ("annual_mileage", "miles/year"),
+    ("vehicle_type", "0=Sedan, 1=Sports"),
+    ("speeding_violations", "count"),
+    ("duis", "count"),
+    ("past_accidents", "count"),
+    ("outcome", "0=No claim, 1=Claim"),
+]
+schema_df = pd.DataFrame(schema_rows, columns=["Column", "Meaning"])
+
+with st.expander("📑 Dataset (concise table)", expanded=True):
+    st.table(schema_df)
+
     
 st.subheader("Raw Preview")
 st.dataframe(df.head(), use_container_width=True)
