@@ -243,7 +243,7 @@ best_idx = int(np.nanargmax(accuracies))
 best_feature = used_features[best_idx]
 best_accuracy = float(accuracies[best_idx])
 
-def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
+def highlight_card(title, value, sub=None, bg="#22c55e", fg="white"):
     st.markdown(
         f"""
         <div style="
