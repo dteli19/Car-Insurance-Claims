@@ -1,4 +1,4 @@
-# app.py — Context • Objective • Data • Actions • Observations • Results
+# app.py — Context • Objective • Data • Actions • Observations • Results (Best Single Feature Accuracy)
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -12,8 +12,13 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
-from sklearn.cluster import KMeans
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    roc_auc_score,
+    accuracy_score,
+    f1_score,
+)
 
 # ------------------------------------------------------------------------------
 # Page setup
@@ -73,8 +78,8 @@ This project turns raw data into structured insights that can inform marketing, 
 st.header("Objective")
 st.markdown(
     """
-Identify patterns and segments that explain **capacity** (e.g., limits, product penetration) and **behavior**
-(e.g., channel usage), and—when a labeled target is available—build a **baseline predictive model** to support decisions.
+Select the **single most predictive feature** for a chosen target by comparing
+**Accuracy** (primary), with **F1** and **ROC AUC** as additional context (when applicable).
 """
 )
 
@@ -95,15 +100,15 @@ with c1:
     st.metric("Overall Missing %", f"{miss_pct:.2f}%")
 
 # Summary table (numeric only)
-numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+numeric_cols_all = df.select_dtypes(include=[np.number]).columns.tolist()
 st.subheader("Summary (Numeric Features)")
-if numeric_cols:
-    desc = df[numeric_cols].agg(["count", "mean", "median", "std", "min", "max"]).T
-    q = df[numeric_cols].quantile([0.25, 0.75])
+if numeric_cols_all:
+    desc = df[numeric_cols_all].agg(["count", "mean", "median", "std", "min", "max"]).T
+    q = df[numeric_cols_all].quantile([0.25, 0.75])
     desc["q1"] = q.loc[0.25].values
     desc["q3"] = q.loc[0.75].values
     desc["iqr"] = desc["q3"] - desc["q1"]
-    desc["missing_%"] = (df[numeric_cols].isna().mean() * 100).values
+    desc["missing_%"] = (df[numeric_cols_all].isna().mean() * 100).values
     st.dataframe(
         desc[
             ["count", "mean", "median", "std", "min", "q1", "q3", "iqr", "max", "missing_%"]
@@ -122,172 +127,155 @@ st.markdown(
 **Steps performed**
 1. **Header normalization** (trim spaces; replace internal spaces with underscores).  
 2. **Duplicate removal** (exact duplicate rows).  
-3. **Type inspection**; **numeric subset** prepared for EDA and modeling.  
-4. For modeling: **Standardize numeric** and **One-Hot encode categorical** features via a `ColumnTransformer`.
+3. **Type inspection**; numeric/categorical split for modeling.  
+4. **Per-feature pipelines**:  
+   - Numeric → `StandardScaler`  
+   - Categorical → `OneHotEncoder(handle_unknown="ignore")`  
+   - Estimator → `LogisticRegression(max_iter=1000)`  
 """
 )
 
-# Apply duplicate removal (keep original index for potential alignment if needed)
 before = len(df)
 df_clean = df[~df.duplicated()].copy()
 after = len(df_clean)
-
 st.caption(f"Removed {before - after} duplicate rows (kept {after}).")
 
 # ------------------------------------------------------------------------------
-# SECTION: Observations (auto-generated from current data)
+# SECTION: Observations (light, data-driven)
 # ------------------------------------------------------------------------------
 st.header("Observations")
 obs = []
-
-# 1) Skew cues (top 3 right-skewed)
-if numeric_cols:
-    skew_s = df_clean[numeric_cols].skew(numeric_only=True).sort_values(ascending=False)
+# skew signal
+if numeric_cols_all:
+    skew_s = df_clean[numeric_cols_all].skew(numeric_only=True).sort_values(ascending=False)
     right_skewed = [f"{c} (skew={v:.2f})" for c, v in skew_s.head(3).items() if v > 1.0]
     if right_skewed:
         obs.append("Right-skew detected: " + ", ".join(right_skewed) + ".")
-
-# 2) Typical ranges (IQR)
-for col in numeric_cols[:5]:  # keep it concise
+# typical ranges
+for col in numeric_cols_all[:5]:
     series = df_clean[col].dropna()
     if len(series) > 0:
         q1, q3 = series.quantile(0.25), series.quantile(0.75)
         obs.append(f"**{col}** typically spans **{q1:,.2f}–{q3:,.2f}** (IQR).")
-
-# 3) Correlations (top absolute)
-if len(numeric_cols) >= 2:
-    corr_abs = df_clean[numeric_cols].corr(numeric_only=True).abs()
-    upper = corr_abs.where(np.triu(np.ones(corr_abs.shape), k=1).astype(bool))
-    top_corr = upper.stack().sort_values(ascending=False).head(5)
-    if not top_corr.empty:
-        txt = "; ".join([f"{a}–{b} ({v:.2f})" for (a, b), v in top_corr.items()])
-        obs.append(f"Strongest numeric correlations: {txt}.")
-
 if obs:
     for o in obs:
         st.markdown(f"- {o}")
 else:
-    st.markdown("- No notable skew or correlation signals detected in the current dataset.")
+    st.markdown("- No notable skew/range signals detected.")
 
-# Optional quick EDA plot
-if numeric_cols:
+# Quick EDA plot
+if numeric_cols_all:
     st.subheader("Distribution & Box Plot")
-    feat = st.selectbox("Choose a numeric feature", options=numeric_cols, index=0)
+    feat_for_plot = st.selectbox("Choose a numeric feature", options=numeric_cols_all, index=0, key="eda_feat")
     cA, cB = st.columns(2)
     with cA:
         fig, ax = plt.subplots()
-        sns.histplot(df_clean[feat].dropna(), bins=30, ax=ax)
-        ax.set_xlabel(feat); ax.set_ylabel("Count")
+        sns.histplot(df_clean[feat_for_plot].dropna(), bins=30, ax=ax)
+        ax.set_xlabel(feat_for_plot); ax.set_ylabel("Count")
         st.pyplot(fig)
     with cB:
         fig, ax = plt.subplots()
-        sns.boxplot(x=df_clean[feat].dropna(), ax=ax)
-        ax.set_xlabel(feat); ax.set_ylabel("")
+        sns.boxplot(x=df_clean[feat_for_plot].dropna(), ax=ax)
+        ax.set_xlabel(feat_for_plot); ax.set_ylabel("")
         st.pyplot(fig)
 
 # ------------------------------------------------------------------------------
-# SECTION: Results
-# - If a binary target exists (or selected), show baseline classifier results.
-# - Otherwise, run KMeans (K=3) on numeric features and show cluster profiles.
+# SECTION: Results — Best Single Feature by Accuracy (no clustering)
 # ------------------------------------------------------------------------------
-st.header("Results")
+st.header("Results — Best Single Feature by Accuracy")
 
-# Try to guess a binary-ish target; let user override
-candidates = [c for c in df_clean.columns if c.lower() in
-              ("target", "label", "fraud_found", "is_fraud", "fraud_flag", "claim", "claim_status", "made_claim")]
-default_idx = (df_clean.columns.get_loc(candidates[0]) if candidates else 0)
-target_col = st.selectbox(
-    "Target (optional; leave as-is if unsupervised)",
-    options=["(no target)"] + df_clean.columns.tolist(),
-    index=0 if not candidates else (df_clean.columns.get_loc(candidates[0]) + 1)
-)
+# Target selection (required)
+common_targets = ["target", "label", "claim", "claim_status", "made_claim", "fraud_flag", "is_fraud", "fraud_found"]
+guesses = [c for c in df_clean.columns if c.lower() in common_targets]
+default_idx = (df_clean.columns.get_loc(guesses[0]) if guesses else 0)
+target_col = st.selectbox("Select target column (binary preferred)", options=df_clean.columns, index=default_idx)
 
-supervised = target_col != "(no target)"
+if target_col not in df_clean.columns:
+    st.error("Please select a valid target column.")
+    st.stop()
 
-if supervised:
-    y = df_clean[target_col]
-    X = df_clean.drop(columns=[target_col])
+y = df_clean[target_col]
+X_all = df_clean.drop(columns=[target_col])
 
-    num_cols_model = X.select_dtypes(include=[np.number]).columns.tolist()
-    cat_cols_model = [c for c in X.columns if c not in num_cols_model]
+# Identify types
+num_cols = X_all.select_dtypes(include=[np.number]).columns.tolist()
+cat_cols = [c for c in X_all.columns if c not in num_cols]
 
-    st.markdown("**Baseline Classifier: Logistic Regression**")
-    st.caption("Numeric → StandardScaler; Categorical → OneHotEncoder")
+# Train/validation split (stratify for classification if sensible)
+stratify_arg = y if y.nunique() <= 20 else None
+test_size = st.slider("Test size", 0.10, 0.40, 0.20, 0.05)
+random_state = 42
 
-    stratify_arg = y if y.nunique() <= 20 else None
+# Helper to evaluate a single feature
+def eval_single_feature(feature_name: str):
+    X = df_clean[[feature_name]]
+    # Determine type
+    if feature_name in num_cols:
+        pre = ColumnTransformer(
+            transformers=[("num", StandardScaler(), [feature_name])],
+            remainder="drop",
+        )
+    else:
+        pre = ColumnTransformer(
+            transformers=[("cat", OneHotEncoder(handle_unknown="ignore"), [feature_name])],
+            remainder="drop",
+        )
+
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=stratify_arg
+        X, y, test_size=test_size, random_state=random_state, stratify=stratify_arg
     )
 
-    pre = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), num_cols_model),
-            ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols_model),
-        ],
-        remainder="drop",
-    )
+    model = Pipeline(steps=[("preprocess", pre), ("clf", LogisticRegression(max_iter=1000))])
+    model.fit(X_train, y_train)
 
-    pipe = Pipeline(steps=[("preprocess", pre), ("clf", LogisticRegression(max_iter=1000))])
-    pipe.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
 
-    y_pred = pipe.predict(X_test)
-    st.subheader("Classification Report")
-    rep = pd.DataFrame(classification_report(y_test, y_pred, output_dict=True, zero_division=0)).T.round(3)
-    st.dataframe(rep, use_container_width=True)
-
-    # ROC AUC if binary probabilities available
+    # Metrics
+    acc = accuracy_score(y_test, y_pred)
+    # F1 (binary or multi)
     try:
-        if y_test.nunique() == 2 and hasattr(pipe.named_steps["clf"], "predict_proba"):
-            y_prob = pipe.predict_proba(X_test)[:, 1]
+        average = "binary" if y_test.nunique() == 2 else "weighted"
+        f1 = f1_score(y_test, y_pred, average=average, zero_division=0)
+    except Exception:
+        f1 = np.nan
+
+    # AUC (only meaningful for binary and if predict_proba exists)
+    auc = np.nan
+    try:
+        if hasattr(model.named_steps["clf"], "predict_proba") and y_test.nunique() == 2:
+            y_prob = model.predict_proba(X_test)[:, 1]
             auc = roc_auc_score(y_test, y_prob)
-            st.write(f"**ROC AUC:** {auc:.3f}")
     except Exception:
         pass
 
-    # Confusion matrix
-    cm = confusion_matrix(y_test, y_pred)
-    fig, ax = plt.subplots()
-    sns.heatmap(cm, annot=True, fmt="d", cbar=False, ax=ax)
-    ax.set_xlabel("Predicted"); ax.set_ylabel("Actual"); ax.set_title("Confusion Matrix")
-    st.pyplot(fig)
+    return {
+        "feature": feature_name,
+        "type": "numeric" if feature_name in num_cols else "categorical",
+        "accuracy": acc,
+        "f1": f1,
+        "auc": auc,
+    }
 
-else:
-    # Unsupervised: KMeans (K=3) on numeric columns
-    if len(numeric_cols) < 2:
-        st.info("Not enough numeric features to run clustering.")
-    else:
-        st.markdown("**Unsupervised Segmentation: KMeans (K=3)**")
-        X = df_clean[numeric_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0).values
-        X_scaled = StandardScaler().fit_transform(X)
+# Evaluate all features one-by-one
+results = []
+for feat in X_all.columns:
+    try:
+        results.append(eval_single_feature(feat))
+    except Exception as e:
+        # Keep going even if a single feature fails (e.g., constant col)
+        results.append({"feature": feat, "type": "error", "accuracy": np.nan, "f1": np.nan, "auc": np.nan})
 
-        k = 3
-        km = KMeans(n_clusters=k, n_init=10, random_state=42)
-        labels = km.fit_predict(X_scaled)
+res_df = pd.DataFrame(results)
 
-        scored = df_clean.copy()
-        scored["CLUSTER"] = labels
+# Rank by accuracy, then by AUC as tie-breaker
+res_df["accuracy_rank"] = (-res_df["accuracy"].fillna(-1), -res_df["auc"].fillna(-1))
+res_df = res_df.sort_values(by=["accuracy", "auc"], ascending=[False, False]).drop(columns=["accuracy_rank"])
 
-        st.subheader("Cluster Profiles (Mean by Feature)")
-        prof = scored.groupby("CLUSTER")[numeric_cols].mean().round(2)
-        st.dataframe(prof, use_container_width=True)
-
-        # Simple cluster descriptions (relative z across clusters)
-        st.subheader("Cluster Descriptions")
-        prof_z = (prof - prof.mean()) / (prof.std(ddof=0).replace(0, 1))
-        for cid, row in prof_z.iterrows():
-            top_feats = ", ".join(row.sort_values(ascending=False).head(3).index.tolist())
-            st.markdown(f"- **Cluster {cid}** — higher on: {top_feats}")
-
-        # Download labeled data
-        st.download_button(
-            "Download data with cluster labels (CSV)",
-            data=scored.to_csv(index=False),
-            file_name="clustered_output.csv",
-            mime="text/csv",
-        )
-
-# ------------------------------------------------------------------------------
-# Footer
-# ------------------------------------------------------------------------------
-st.markdown("---")
-st.caption("Generated with Streamlit • Edit the text in each section to match your domain narrative.")
+# Display best feature
+if not res_df.empty and res_df["accuracy"].notna().any():
+    best_row = res_df.iloc[0]
+    st.subheader("Best Single Feature")
+    st.markdown(
+        f"- **Feature:** `{best_row['feature']}`  \n"
+        f"- **Type:** {best_row['type']}  \n"
+        f"- **Ac**
