@@ -64,52 +64,16 @@ with st.expander("Context & Problem Statement", expanded=True):
     They have supplied their customer data as a csv file called car_insurance.csv, along with a table detailing the column names and descriptions below.
     """)
 
-st.markdown("""
-- **id** — Unique client identifier  
-- **age** — Client’s age group  
-  - 0: 16–25  
-  - 1: 26–39  
-  - 2: 40–64  
-  - 3: 65+  
-- **gender** — Client’s gender  
-  - 0: Female  
-  - 1: Male  
-- **driving_experience** — Years driving  
-  - 0: 0–9  
-  - 1: 10–19  
-  - 2: 20–29  
-  - 3: 30+  
-- **education** — Education level  
-  - 0: No education  
-  - 1: High school  
-  - 2: University  
-- **income** — Income level  
-  - 0: Poverty  
-  - 1: Working class  
-  - 2: Middle class  
-  - 3: Upper class  
-- **credit_score** — Credit score (0–1)  
-- **vehicle_ownership** — Vehicle ownership  
-  - 0: Financing  
-  - 1: Owns  
-- **vehicle_year** — Registration year  
-  - 0: Before 2015  
-  - 1: 2015 or later  
-- **married** — Marital status  
-  - 0: Not married  
-  - 1: Married  
-- **children** — Number of children  
-- **postal_code** — Postal code  
-- **annual_mileage** — Miles driven per year  
-- **vehicle_type** — Type of car  
-  - 0: Sedan  
-  - 1: Sports car  
-- **speeding_violations** — Count of speeding violations  
-- **duis** — Count of DUI incidents  
-- **past_accidents** — Count of past accidents  
-- **outcome** — Insurance claim status  
-  - 0: No claim  
-  - 1: Made a claim  
+with st.expander("📑 Dataset (concise)", expanded=True):
+    st.markdown("""
+- **id**: client ID • **age**: 0=16–25, 1=26–39, 2=40–64, 3=65+ • **gender**: 0=F, 1=M  
+- **driving_experience**: 0=0–9, 1=10–19, 2=20–29, 3=30+ • **education**: 0=None, 1=HS, 2=Univ  
+- **income**: 0=Poverty, 1=Working, 2=Middle, 3=Upper • **credit_score**: 0–1  
+- **vehicle_ownership**: 0=Financing, 1=Owns • **vehicle_year**: 0=<2015, 1=≥2015  
+- **married**: 0=No, 1=Yes • **children**: count • **postal_code**: code  
+- **annual_mileage**: miles/yr • **vehicle_type**: 0=Sedan, 1=Sports  
+- **speeding_violations**: count • **duis**: count • **past_accidents**: count  
+- **outcome**: 0=No claim, 1=Claim
 """)
     
 st.subheader("Raw Preview")
