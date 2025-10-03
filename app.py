@@ -293,14 +293,60 @@ def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
 highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: {best_accuracy:.3f}", bg="#1f6feb")
 
 # ---------- Full ranking (lighter colors) ----------
-rank_df = pd.DataFrame({"feature": used_features, "accuracy": accuracies})
-rank_df = rank_df.sort_values("accuracy", ascending=False).reset_index(drop=True)
+# =========================
+# Rank variables by Accuracy (statsmodels Logit) + Bar Chart
+# Requirements in scope: df_clean (DataFrame), DEP_VAR (str: dependent var name)
+# =========================
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from statsmodels.formula.api import logit
+import streamlit as st
+
+# 1) Build the feature set (drop outcome + obvious identifiers)
+ID_COLS = ["id"]
+feature_df = df_clean.drop(columns=[c for c in [DEP_VAR, *ID_COLS] if c in df_clean.columns], errors="ignore")
+
+# 2) Compute per-feature accuracy via logit("outcome ~ feature")
+used_features, accuracies = [], []
+for col in feature_df.columns:
+    sub = pd.concat([df_clean[[DEP_VAR]], feature_df[[col]]], axis=1).dropna()
+    if sub.empty or sub[DEP_VAR].nunique() < 2:
+        continue
+
+    model = None
+    # try as numeric
+    try:
+        model = logit(f"{DEP_VAR} ~ {col}", data=sub).fit(disp=False)
+    except Exception:
+        # fallback: treat as categorical
+        try:
+            model = logit(f"{DEP_VAR} ~ C({col})", data=sub).fit(disp=False)
+        except Exception:
+            model = None
+    if model is None:
+        continue
+
+    try:
+        cm = model.pred_table()  # [[tn, fp], [fn, tp]] at 0.5
+        tn, fp, fn, tp = cm[0, 0], cm[0, 1], cm[1, 0], cm[1, 1]
+        acc = (tn + tp) / (tn + fp + fn + tp)
+    except Exception:
+        acc = np.nan
+
+    used_features.append(col)
+    accuracies.append(acc)
+
+if not accuracies:
+    st.error("No valid single-feature Logit models could be fit.")
+    st.stop()
+
+# 3) Build and show the ranking table (light, pretty)
+rank_df = pd.DataFrame({"Feature": used_features, "Accuracy": accuracies})
+rank_df = rank_df.sort_values("Accuracy", ascending=False).reset_index(drop=True)
+best_feature = rank_df.iloc[0]["Feature"]
 
 st.subheader("All Features — Ranked by Accuracy")
-
-rank_disp = rank_df.copy().rename(columns={"feature": "Feature", "accuracy": "Accuracy"})
-rank_disp[""] = np.where(rank_disp["Feature"] == best_feature, "⭐", "")
-rank_disp = rank_disp[["", "Feature", "Accuracy"]].round(3)
 
 def zebra_light(data, even="#f9fafb", odd="#ffffff", font="#111827"):
     styles = pd.DataFrame("", index=data.index, columns=data.columns)
@@ -316,31 +362,35 @@ def highlight_best_row(data, best_value, color="#d1fae5", font="#065f46"):
         styles.loc[mask, :] = f"background-color: {color}; color: {font}; font-weight:600;"
     return styles
 
+table_disp = rank_df.copy()
+table_disp[""] = np.where(table_disp["Feature"] == best_feature, "⭐", "")
+table_disp = table_disp[["", "Feature", "Accuracy"]].round({"Accuracy": 3})
+
 try:
     rank_sty = (
-        rank_disp.style
-          .set_table_styles([
-              {"selector": "th", "props": [
-                  ("text-align", "left"),
-                  ("background", "#eef2ff"),
-                  ("color", "#111827"),
-                  ("padding", "8px 10px"),
-                  ("border", "0px")
-              ]},
-              {"selector": "td", "props": [
-                  ("padding", "8px 10px"),
-                  ("border", "0px")
-              ]}
-          ])
-          .hide(axis="index")
-          .format({"Accuracy": "{:.3f}"})
-          .bar(subset=["Accuracy"], color="#93c5fd", vmin=0, vmax=1)
-          .apply(zebra_light, axis=None)
-          .apply(lambda d: highlight_best_row(d, best_feature), axis=None)
+        table_disp.style
+            .set_table_styles([
+                {"selector": "th", "props": [
+                    ("text-align", "left"),
+                    ("background", "#eef2ff"),
+                    ("color", "#111827"),
+                    ("padding", "8px 10px"),
+                    ("border", "0px")
+                ]},
+                {"selector": "td", "props": [
+                    ("padding", "8px 10px"),
+                    ("border", "0px")
+                ]}
+            ])
+            .hide(axis="index")
+            .format({"Accuracy": "{:.3f}"})
+            .bar(subset=["Accuracy"], color="#93c5fd", vmin=0, vmax=1)
+            .apply(zebra_light, axis=None)
+            .apply(lambda d: highlight_best_row(d, best_feature), axis=None)
     )
     st.dataframe(rank_sty, use_container_width=True)
 except Exception:
-    st.dataframe(rank_disp.round({"Accuracy": 3}), use_container_width=True)
+    st.dataframe(table_disp, use_container_width=True)
 
 st.download_button(
     "⬇️ Download feature accuracies (CSV)",
@@ -349,12 +399,12 @@ st.download_button(
     mime="text/csv",
 )
 
-# ---------- Accuracy bar chart ----------
+# 4) Bar chart (Top N)
 st.subheader("Accuracy — Top Features")
 max_n = min(20, len(rank_df))
-top_n = st.slider("Show top N features", 5, max_n, min(10, max_n), 1)
+top_n = st.slider("Show top N features", min_value=5, max_value=max_n, value=min(10, max_n), step=1)
 
-plot_df = rank_df.head(top_n).sort_values("accuracy")
+plot_df = rank_df.head(top_n).sort_values("Accuracy")
 fig, ax = plt.subplots(figsize=(8, max(3.5, 0.45*top_n)))
 bars = ax.barh(plot_df["Feature"], plot_df["Accuracy"], color="#93c5fd")
 
