@@ -242,7 +242,7 @@ best_idx = int(np.nanargmax(accuracies))
 best_feature = used_features[best_idx]
 best_accuracy = float(accuracies[best_idx])
 
-def highlight_card(title, value, sub=None, bg="#bbf7d0", fg="white"):
+def highlight_card(title, value, sub=None, bg="#bbf7d0", fg="#065f46"):
     st.markdown(
         f"""
         <div style="
@@ -251,7 +251,7 @@ def highlight_card(title, value, sub=None, bg="#bbf7d0", fg="white"):
             background:{bg};
             color:{fg};
             box-shadow: 0 6px 20px rgba(0,0,0,0.10);
-            border: 1px solid rgba(255,255,255,0.12);
+            border: 1px solid #a7f3d0;
             ">
             <div style="font-size:13px; opacity:0.9; letter-spacing:.4px; text-transform:uppercase;">
                 {title}
@@ -259,7 +259,7 @@ def highlight_card(title, value, sub=None, bg="#bbf7d0", fg="white"):
             <div style="font-size:30px; font-weight:700; margin-top:6px;">
                 {value}
             </div>
-            <div style="font-size:24px; margin-top:4px;">
+            <div style="font-size:16px; margin-top:4px;">
                 {sub or ""}
             </div>
         </div>
@@ -267,7 +267,14 @@ def highlight_card(title, value, sub=None, bg="#bbf7d0", fg="white"):
         unsafe_allow_html=True
     )
 
-highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: {best_accuracy:.3f}", bg="#bbf7d0")
+
+highlight_card(
+    "🏆 Best Feature",
+    f"{best_feature}",
+    f"Accuracy: {best_accuracy:.3f}",
+    bg="#bbf7d0",   # light mint green
+    fg="#065f46"    # deep emerald text
+)
 
 # ---------- Full ranking (lighter colors) ----------
 # =========================
