@@ -268,7 +268,7 @@ def highlight_card(title, value, sub=None, bg="#22c55e", fg="white"):
         unsafe_allow_html=True
     )
 
-highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: {best_accuracy:.3f}", bg="#1f6feb")
+highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: {best_accuracy:.3f}", bg="#22c55e")
 
 # ---------- Full ranking (lighter colors) ----------
 # =========================
