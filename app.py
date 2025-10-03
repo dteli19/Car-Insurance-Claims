@@ -300,20 +300,20 @@ def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
 
 highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: **{best_accuracy:.3f}**", bg="#1f6feb")
 
-    bf_sty = (
-        bf_disp.style
-        .hide(axis="index")
-        .set_properties(**{"text-align": "left"})
-        .set_table_styles([
-            {"selector": "th", "props": [("text-align", "left"),
-                                         ("background", "#0b1220"),
-                                         ("color", "white"),
-                                         ("padding", "8px 10px")]},
-            {"selector": "td", "props": [("padding", "8px 10px")]}
+bf_sty = (
+    bf_disp.style
+    .hide(axis="index")
+    .set_properties(**{"text-align": "left"})
+    .set_table_styles([
+    {"selector": "th", "props": [("text-align", "left"),
+                                 ("background", "#0b1220"),
+                                 ("color", "white"),
+                                 ("padding", "8px 10px")]},
+        {"selector": "td", "props": [("padding", "8px 10px")]}
         ])
-        .bar(subset=["Accuracy"], color="#66b3ff", vmin=0, vmax=1)
+    .bar(subset=["Accuracy"], color="#66b3ff", vmin=0, vmax=1)
     )
-    st.dataframe(bf_sty, use_container_width=True)
+st.dataframe(bf_sty, use_container_width=True)
 
 # ---------- Full ranking (Feature • Accuracy) ----------
 rank_df = pd.DataFrame({"feature": used_features, "accuracy": accuracies})
