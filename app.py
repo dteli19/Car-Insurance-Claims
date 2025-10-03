@@ -298,13 +298,8 @@ def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
         unsafe_allow_html=True
     )
 
-c1, c2 = st.columns([1, 2])
-with c1:
-    highlight_card("🏆 Best Feature", f"`{best_feature}`", f"Accuracy: **{best_accuracy:.3f}**", bg="#1f6feb")
-with c2:
-    bf_disp = (best_feature_df.copy()
-               .rename(columns={"best_feature": "Feature", "best_accuracy": "Accuracy"})
-               .round({"Accuracy": 3}))
+highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: **{best_accuracy:.3f}**", bg="#1f6feb")
+
     bf_sty = (
         bf_disp.style
         .hide(axis="index")
