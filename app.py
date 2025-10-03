@@ -86,7 +86,7 @@ schema_rows = [
 ]
 schema_df = pd.DataFrame(schema_rows, columns=["Column", "Meaning"])
 
-with st.expander("📑 Dataset (concise table)", expanded=True):
+with st.expander("📑 Dataset Details:", expanded=True):
     st.table(schema_df)
 
     
