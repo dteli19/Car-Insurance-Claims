@@ -205,9 +205,14 @@ before, after = len(df), len(df_clean)
 st.caption(f"Removed {before - after} duplicate rows (kept {after}).")
 
 # ---------------------------------------------------------
-# Results 
+# Results — Best Single Feature basis Accuracy 
 # ---------------------------------------------------------
-st.header("Results — Best Single Feature (Accuracy)")
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from statsmodels.formula.api import logit
+
+st.header("Results — Best Single Feature basis Accuracy")
 
 # Candidate features: all columns except the dependent var
 features = [c for c in df_clean.columns if c != DEP_VAR]
@@ -220,7 +225,7 @@ for col in features:
     # Drop rows with NA in outcome or this feature
     sub = df_clean[[DEP_VAR, col]].dropna().copy()
     if sub.empty or sub[DEP_VAR].dropna().nunique() < 2:
-        # cannot fit a logit if outcome has <2 classes after dropping NA
+        # cannot fit a logit if outcome has < 2 classes after dropping NA
         continue
 
     # Try numeric/formula directly first
@@ -267,24 +272,109 @@ best_feature_df = pd.DataFrame(
     {"best_feature": [best_feature], "best_accuracy": [best_accuracy]}
 )
 
-st.subheader("Best Feature")
-st.dataframe(best_feature_df.round(3), use_container_width=True)
+# ---------- Pretty "Best Feature" card + compact table ----------
+def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
+    st.markdown(
+        f"""
+        <div style="
+            border-radius:16px;
+            padding:16px 18px;
+            background:{bg};
+            color:{fg};
+            box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+            border: 1px solid rgba(255,255,255,0.12);
+            ">
+            <div style="font-size:13px; opacity:0.9; letter-spacing:.4px; text-transform:uppercase;">
+                {title}
+            </div>
+            <div style="font-size:30px; font-weight:700; margin-top:6px;">
+                {value}
+            </div>
+            <div style="font-size:12px; opacity:0.9; margin-top:4px;">
+                {sub or ""}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-# Full ranking
+c1, c2 = st.columns([1, 2])
+with c1:
+    highlight_card("🏆 Best Feature", f"`{best_feature}`", f"Accuracy: **{best_accuracy:.3f}**", bg="#1f6feb")
+with c2:
+    bf_disp = (best_feature_df.copy()
+               .rename(columns={"best_feature": "Feature", "best_accuracy": "Accuracy"})
+               .round({"Accuracy": 3}))
+    bf_sty = (
+        bf_disp.style
+        .hide(axis="index")
+        .set_properties(**{"text-align": "left"})
+        .set_table_styles([
+            {"selector": "th", "props": [("text-align", "left"),
+                                         ("background", "#0b1220"),
+                                         ("color", "white"),
+                                         ("padding", "8px 10px")]},
+            {"selector": "td", "props": [("padding", "8px 10px")]}
+        ])
+        .bar(subset=["Accuracy"], color="#66b3ff", vmin=0, vmax=1)
+    )
+    st.dataframe(bf_sty, use_container_width=True)
+
+# ---------- Full ranking (Feature • Accuracy) ----------
 rank_df = pd.DataFrame({"feature": used_features, "accuracy": accuracies})
 rank_df = rank_df.sort_values("accuracy", ascending=False).reset_index(drop=True)
 
 st.subheader("All Features — Ranked by Accuracy (Logit, full data)")
-st.dataframe(rank_df.round(3), use_container_width=True)
+rank_disp = (rank_df.copy()
+             .rename(columns={"feature": "Feature", "accuracy": "Accuracy"})
+             .round({"Accuracy": 3}))
+rank_disp[""] = np.where(rank_disp["Feature"] == best_feature, "⭐", "")
+rank_disp = rank_disp[["", "Feature", "Accuracy"]]
 
-# Optional small bar chart (top 10)
-top_n = min(10, len(rank_df))
-fig, ax = plt.subplots(figsize=(7, max(3, int(top_n*0.4))))
+rank_sty = (
+    rank_disp.style
+      .hide(axis="index")
+      .set_properties(**{"text-align": "left"})
+      .set_table_styles([
+          {"selector": "th", "props": [("text-align", "left"),
+                                       ("background", "#0b1220"),
+                                       ("color", "white"),
+                                       ("padding", "8px 10px")]},
+          {"selector": "td", "props": [("padding", "8px 10px")]}
+      ])
+      .bar(subset=["Accuracy"], color="#76b7ff", vmin=0, vmax=1)
+)
+st.dataframe(rank_sty, use_container_width=True)
+
+st.download_button(
+    "⬇️ Download feature accuracies (CSV)",
+    data=rank_df.to_csv(index=False),
+    file_name="feature_accuracies.csv",
+    mime="text/csv",
+)
+
+# ---------- Accuracy bar chart (Top N) ----------
+st.subheader("Accuracy — Top Features")
+max_n = min(20, len(rank_df))
+top_n = st.slider("Show top N features", min_value=5, max_value=max_n, value=min(10, max_n), step=1)
+
 plot_df = rank_df.head(top_n).sort_values("accuracy")
+fig, ax = plt.subplots(figsize=(8, max(3.5, 0.45*top_n)))
 ax.barh(plot_df["feature"], plot_df["accuracy"])
+
 ax.set_xlabel("Accuracy (pred_table threshold 0.5)")
 ax.set_ylabel("")
-st.pyplot(fig)
+ax.set_xlim(0, 1)
+ax.grid(axis="x", linestyle=":", alpha=0.35)
 
-st.markdown("---")
-st.caption("This app mirrors the Colab loop: per-feature Logit on full data, accuracy via pred_table().")
+# Annotate values
+for i, (feat, acc) in enumerate(zip(plot_df["feature"], plot_df["accuracy"])):
+    ax.text(acc + 0.01, i, f"{acc:.3f}", va="center")
+
+# Highlight the best if visible
+if best_feature in plot_df["feature"].values:
+    idx = plot_df.index[plot_df["feature"] == best_feature][0]
+    ax.barh([best_feature], [plot_df.loc[idx, "accuracy"]],
+            edgecolor="#0b1220", linewidth=2)
+
+st.pyplot(fig)
