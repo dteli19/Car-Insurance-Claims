@@ -52,27 +52,17 @@ st.success(f"Loaded dataset from {src}")
 # ---------------------------------------------------------
 # Context / Objective / About the Data (brief)
 # ---------------------------------------------------------
-st.header("Context")
-st.markdown("Insurance companies invest a lot of time and money into optimizing their pricing and accurately estimating the likelihood that customers will make a claim. In many countries insurance it is a legal requirement to have car insurance in order to drive a vehicle on public roads, so the market is very large!. Knowing all of this, On the Road car insurance have requested your services in building a model to predict whether a customer will make a claim on their insurance during the policy period. As they have very little expertise and infrastructure for deploying and monitoring machine learning models, they've asked you to identify the single feature that results in the best performing model, as measured by accuracy, so they can start with a simple model in production.")
+with st.expander("Context & Problem Statement", expanded=True):
+    st.markdown("""
+    **Context**  
+    Insurance companies invest a lot of time and money into optimizing their pricing and accurately estimating the likelihood that customers will make a claim. In many countries insurance it is a legal requirement to have car insurance in order to drive a vehicle on public roads, so the market is very large!. Knowing all of this, On the Road car insurance have requested your services in building a model to predict whether a customer will make a claim on their insurance during the policy period. As they have very little expertise and infrastructure for deploying and monitoring machine learning models, they've asked you to identify the single feature that results in the best performing model, as measured by accuracy, so they can start with a simple model in production.
+    
+    **Problem Statement**  
+    Identify the single feature of the data that is the best predictor of whether a customer will put in a claim.
 
-st.header("Objective")
-st.markdown("Identify the single feature of the data that is the best predictor of whether a customer will put in a claim.")
-
-st.header("About the Data")
-st.markdown("They have supplied their customer data as a csv file called car_insurance.csv, along with a table detailing the column names and descriptions below.")
-c0, c1 = st.columns([2, 1])
-
-with c0:
-    st.subheader("Preview")
-    st.dataframe(df.head(), use_container_width=True)
-with c1:
-    st.subheader("Shape & Missingness")
-    st.metric("Rows", len(df))
-    st.metric("Columns", df.shape[1])
-    st.metric("Overall Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
-
-# Concise schema table
-schema_rows = [
+    **About the Data**
+    They have supplied their customer data as a csv file called car_insurance.csv, along with a table detailing the column names and descriptions below.
+    schema_rows = [
     ("id", "Unique client ID"),
     ("age", "Client's age (0:16–25, 1:26–39, 2:40–64, 3:65+)"),
     ("gender", "Client's gender (0:Female, 1:Male)"),
@@ -91,13 +81,25 @@ schema_rows = [
     ("duis", "Count of DUIs"),
     ("past_accidents", "Count of past accidents"),
     ("outcome", "Insurance claim (0:No, 1:Yes)"),
-]
+    ]
 
-schema_df = pd.DataFrame(schema_rows, columns=["Column", "Description"])
+    schema_df = pd.DataFrame(schema_rows, columns=["Column", "Description"])
 
-st.subheader("Dataset Dictionary (Concise)")
-st.table(schema_df)
+    st.subheader("Dataset Dictionary (Concise)")
+    st.table(schema_df)
+    """)
+    
+    
+st.subheader("Raw Preview")
+st.dataframe(df.head(), use_container_width=True)
 
+
+st.subheader("Shape & Missingness")
+st.metric("Rows", len(df))
+st.metric("Columns", df.shape[1])
+st.metric("Overall Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
+
+# Concise schema table
 
 # ---------------------------------------------------------
 # Guard rails
