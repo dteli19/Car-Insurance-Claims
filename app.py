@@ -137,7 +137,7 @@ c1, c2, c3 = st.columns(3)
 with c1:
     metric_card("Rows", rows, "Total records", bg="#1f6feb")         # Blue
 with c2:
-    metric_card("Columns", cols, "Total fields", bg="#10b981")       # Green
+    metric_card("Columns", cols, "Total fields", bg="#14b8a6")       # Green
 with c3:
     metric_card("Missing %", miss, "Overall null share", bg="#f59e0b") # Amber
 
