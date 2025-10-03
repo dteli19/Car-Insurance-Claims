@@ -82,7 +82,7 @@ st.dataframe(df.head(), use_container_width=True)
 
 st.subheader("Shape & Missingness")
 st.metric("Rows", df.shape[1])
-st.metric("Columns", lens(df)
+st.metric("Columns", lens(df))
 st.metric("Overall Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
 
 # ---------------------------------------------------------
