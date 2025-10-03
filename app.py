@@ -222,7 +222,7 @@ if supervised:
     pre = ColumnTransformer(
         transformers=[
             ("num", StandardScaler(), num_cols_model),
-            ("cat", OneHotEncoder(handle_unknown=\"ignore\"), cat_cols_model),
+            ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols_model),
         ],
         remainder="drop",
     )
