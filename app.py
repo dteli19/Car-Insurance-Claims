@@ -139,7 +139,8 @@ with c1:
 with c2:
     metric_card("Columns", cols, "Total fields", bg="#dbeafe", fg="#1e3a8a") # Blue
 with c3:
-    metric_card("Missing %", miss, "Overall null share", bg="#bbf7d0", fg="#065f46") # Green
+    metric_card("Missing %", miss, "Overall null share", bg="#ede9fe", fg="#5b21b6")  # Lavender
+
 # ---------------------------------------------------------
 # Guard rails
 # ---------------------------------------------------------
