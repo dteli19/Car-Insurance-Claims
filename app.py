@@ -64,26 +64,62 @@ with st.expander("Context & Problem Statement", expanded=True):
     They have supplied their customer data as a csv file called car_insurance.csv, along with a table detailing the column names and descriptions below.
     """)
 
-st.sidebar.markdown("### 📑 Dataset Dictionary")
-st.sidebar.markdown("""
-**age:** 0=16–25, 1=26–39, 2=40–64, 3=65+  
-**gender:** 0=Female, 1=Male  
-**driving_experience:** 0=0–9, 1=10–19, 2=20–29, 3=30+  
-**education:** 0=None, 1=High school, 2=University  
-**income:** 0=Poverty, 1=Working, 2=Middle, 3=Upper  
-**vehicle_ownership:** 0=Financing, 1=Owns  
-**vehicle_year:** 0=<2015, 1=≥2015  
-**vehicle_type:** 0=Sedan, 1=Sports car  
-**outcome:** 0=No claim, 1=Claim  
-""")  
+st.markdown("""
+- **id** — Unique client identifier  
+- **age** — Client’s age group  
+  - 0: 16–25  
+  - 1: 26–39  
+  - 2: 40–64  
+  - 3: 65+  
+- **gender** — Client’s gender  
+  - 0: Female  
+  - 1: Male  
+- **driving_experience** — Years driving  
+  - 0: 0–9  
+  - 1: 10–19  
+  - 2: 20–29  
+  - 3: 30+  
+- **education** — Education level  
+  - 0: No education  
+  - 1: High school  
+  - 2: University  
+- **income** — Income level  
+  - 0: Poverty  
+  - 1: Working class  
+  - 2: Middle class  
+  - 3: Upper class  
+- **credit_score** — Credit score (0–1)  
+- **vehicle_ownership** — Vehicle ownership  
+  - 0: Financing  
+  - 1: Owns  
+- **vehicle_year** — Registration year  
+  - 0: Before 2015  
+  - 1: 2015 or later  
+- **married** — Marital status  
+  - 0: Not married  
+  - 1: Married  
+- **children** — Number of children  
+- **postal_code** — Postal code  
+- **annual_mileage** — Miles driven per year  
+- **vehicle_type** — Type of car  
+  - 0: Sedan  
+  - 1: Sports car  
+- **speeding_violations** — Count of speeding violations  
+- **duis** — Count of DUI incidents  
+- **past_accidents** — Count of past accidents  
+- **outcome** — Insurance claim status  
+  - 0: No claim  
+  - 1: Made a claim  
+""")
     
 st.subheader("Raw Preview")
 st.dataframe(df.head(), use_container_width=True)
 
 st.subheader("Shape & Missingness")
-st.metric("Rows", df.shape[1])
-st.metric("Columns", lens(df))
-st.metric("Overall Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
+c1, c2, c3 = st.columns(3)
+c1.metric("Rows", f"{len(df):,}")
+c2.metric("Columns", f"{df.shape[1]:,}")
+c3.metric("Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
 
 # ---------------------------------------------------------
 # Guard rails
