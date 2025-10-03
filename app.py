@@ -116,10 +116,52 @@ st.subheader("Raw Preview")
 st.dataframe(df.head(), use_container_width=True)
 
 st.subheader("Shape & Missingness")
+def metric_card(title, value, subtitle=None, bg="#0ea5e9", fg="white"):
+    """
+    Renders a single metric 'card' with custom background color.
+
+    title: str (small heading)
+    value: str/number (big text)
+    subtitle: str (tiny helper text)
+    bg: background color (hex or CSS color)
+    fg: foreground/text color
+    """
+    st.markdown(
+        f"""
+        <div style="
+            border-radius:16px;
+            padding:16px 18px;
+            background:{bg};
+            color:{fg};
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            ">
+            <div style="font-size:13px; opacity:0.9; letter-spacing:.4px; text-transform:uppercase;">
+                {title}
+            </div>
+            <div style="font-size:30px; font-weight:700; margin-top:6px;">
+                {value}
+            </div>
+            <div style="font-size:12px; opacity:0.85; margin-top:4px;">
+                {subtitle or ""}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Example usage — three cards in a row
+rows = f"{len(df):,}"
+cols = f"{df.shape[1]:,}"
+miss = f"{(df.isna().mean().mean()*100):.2f}%"
+
 c1, c2, c3 = st.columns(3)
-c1.metric("Rows", f"{len(df):,}")
-c2.metric("Columns", f"{df.shape[1]:,}")
-c3.metric("Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
+with c1:
+    metric_card("Rows", rows, "Total records", bg="#1f6feb")         # Blue
+with c2:
+    metric_card("Columns", cols, "Total fields", bg="#10b981")       # Green
+with c3:
+    metric_card("Missing %", miss, "Overall null share", bg="#f59e0b") # Amber
 
 # ---------------------------------------------------------
 # Guard rails
