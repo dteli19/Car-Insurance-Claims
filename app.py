@@ -300,66 +300,73 @@ def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
 
 highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: {best_accuracy:.3f}", bg="#1f6feb")
 
-# Best-feature compact table (robust)
-bf_disp = (
-    best_feature_df
-      .copy()
-      .rename(columns={"best_feature": "Feature", "best_accuracy": "Accuracy"})
-)
-
-# Ensure numeric dtype for bar styling
-bf_disp["Accuracy"] = pd.to_numeric(bf_disp["Accuracy"], errors="coerce")
-
-try:
-    bf_sty = (
-        bf_disp.style
-        .hide(axis="index")
-        .set_properties(**{"text-align": "left"})
-        .set_table_styles([
-            {"selector": "th", "props": [
-                ("text-align", "left"),
-                ("background", "#0b1220"),
-                ("color", "white"),
-                ("padding", "8px 10px")
-            ]},
-            {"selector": "td", "props": [("padding", "8px 10px")]}
-        ])
-        .format({"Accuracy": "{:.3f}"})
-        .bar(subset=["Accuracy"], color="#66b3ff", vmin=0, vmax=1)
-    )
-    # Newer Streamlit versions support Styler in st.dataframe; if not, the except will catch it
-    st.dataframe(bf_sty, use_container_width=True)
-except Exception:
-    # Fallback: plain DataFrame (still formatted)
-    st.dataframe(bf_disp.round({"Accuracy": 3}), use_container_width=True)
-
-
 # ---------- Full ranking (Feature • Accuracy) ----------
 rank_df = pd.DataFrame({"feature": used_features, "accuracy": accuracies})
 rank_df = rank_df.sort_values("accuracy", ascending=False).reset_index(drop=True)
 
 st.subheader("All Features — Ranked by Accuracy (Logit, full data)")
-rank_disp = (rank_df.copy()
-             .rename(columns={"feature": "Feature", "accuracy": "Accuracy"})
-             .round({"Accuracy": 3}))
+
+# Display copy
+rank_disp = (
+    rank_df.copy()
+      .rename(columns={"feature": "Feature", "accuracy": "Accuracy"})
+)
+
+# Ensure numeric for styling
+rank_disp["Accuracy"] = pd.to_numeric(rank_disp["Accuracy"], errors="coerce")
+# Add a marker for best (first row after sorting)
+best_feature = rank_disp.iloc[0]["Feature"]
 rank_disp[""] = np.where(rank_disp["Feature"] == best_feature, "⭐", "")
 rank_disp = rank_disp[["", "Feature", "Accuracy"]]
 
-rank_sty = (
-    rank_disp.style
-      .hide(axis="index")
-      .set_properties(**{"text-align": "left"})
-      .set_table_styles([
-          {"selector": "th", "props": [("text-align", "left"),
-                                       ("background", "#0b1220"),
-                                       ("color", "white"),
-                                       ("padding", "8px 10px")]},
-          {"selector": "td", "props": [("padding", "8px 10px")]}
-      ])
-      .bar(subset=["Accuracy"], color="#76b7ff", vmin=0, vmax=1)
-)
-st.dataframe(rank_sty, use_container_width=True)
+# --- Styling helpers ---
+def zebra(data, even="#0f172a", odd="#111827", font="#e5e7eb"):
+    """Alternate row background colors (zebra)."""
+    styles = pd.DataFrame("", index=data.index, columns=data.columns)
+    even_mask = (np.arange(len(data)) % 2 == 0)
+    styles.loc[even_mask, :] = f"background-color: {even}; color: {font};"
+    styles.loc[~even_mask, :] = f"background-color: {odd}; color: {font};"
+    return styles
 
+def highlight_best_row(data, best_value, color="#065f46", font="white"):
+    """Highlight the row where Feature == best_value."""
+    styles = pd.DataFrame("", index=data.index, columns=data.columns)
+    if "Feature" in data.columns:
+        mask = data["Feature"] == best_value
+        styles.loc[mask, :] = f"background-color: {color}; color: {font};"
+    return styles
+
+try:
+    rank_sty = (
+        rank_disp.style
+          # Base table look
+          .set_table_styles([
+              {"selector": "th", "props": [
+                  ("text-align", "left"),
+                  ("background", "#0b1220"),
+                  ("color", "white"),
+                  ("padding", "8px 10px"),
+                  ("border", "0px")
+              ]},
+              {"selector": "td", "props": [
+                  ("padding", "8px 10px"),
+                  ("border", "0px")
+              ]}
+          ])
+          .hide(axis="index")
+          .format({"Accuracy": "{:.3f}"})
+          # In-cell bar for Accuracy
+          .bar(subset=["Accuracy"], color="#76b7ff", vmin=0, vmax=1)
+          # Zebra rows then override best row style
+          .apply(zebra, axis=None)
+          .apply(lambda d: highlight_best_row(d, best_feature), axis=None)
+    )
+    st.dataframe(rank_sty, use_container_width=True)
+except Exception:
+    # Fallback: plain dataframe with basic formatting
+    st.dataframe(rank_disp.round({"Accuracy": 3}), use_container_width=True)
+
+# Download button
 st.download_button(
     "⬇️ Download feature accuracies (CSV)",
     data=rank_df.to_csv(index=False),
@@ -385,7 +392,7 @@ ax.grid(axis="x", linestyle=":", alpha=0.35)
 for i, (feat, acc) in enumerate(zip(plot_df["feature"], plot_df["accuracy"])):
     ax.text(acc + 0.01, i, f"{acc:.3f}", va="center")
 
-# Highlight the best if visible
+# Outline the best if visible in the plot
 if best_feature in plot_df["feature"].values:
     idx = plot_df.index[plot_df["feature"] == best_feature][0]
     ax.barh([best_feature], [plot_df.loc[idx, "accuracy"]],
