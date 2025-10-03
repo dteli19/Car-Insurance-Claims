@@ -135,12 +135,11 @@ miss = f"{(df.isna().mean().mean()*100):.2f}%"
 
 c1, c2, c3 = st.columns(3)
 with c1:
-    metric_card("Rows", rows, "Total records", bg="#1f6feb")         # Blue
+    metric_card("Rows", rows, "Total records", bg="#ccfbf1", fg="#134e4a")   # Teal
 with c2:
-    metric_card("Columns", cols, "Total fields", bg="#14b8a6")       # Green
+    metric_card("Columns", cols, "Total fields", bg="#dbeafe", fg="#1e3a8a") # Blue
 with c3:
-    metric_card("Missing %", miss, "Overall null share", bg="#f59e0b") # Amber
-
+    metric_card("Missing %", miss, "Overall null share", bg="#bbf7d0", fg="#065f46") # Green
 # ---------------------------------------------------------
 # Guard rails
 # ---------------------------------------------------------
