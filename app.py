@@ -290,7 +290,7 @@ def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
             <div style="font-size:30px; font-weight:700; margin-top:6px;">
                 {value}
             </div>
-            <div style="font-size:12px; opacity:0.9; margin-top:4px;">
+            <div style="font-size:24px; opacity:100; margin-top:4px;">
                 {sub or ""}
             </div>
         </div>
@@ -298,22 +298,41 @@ def highlight_card(title, value, sub=None, bg="#1f6feb", fg="white"):
         unsafe_allow_html=True
     )
 
-highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: **{best_accuracy:.3f}**", bg="#1f6feb")
+highlight_card("🏆 Best Feature", f"{best_feature}", f"Accuracy: {best_accuracy:.3f}", bg="#1f6feb")
 
-bf_sty = (
-    bf_disp.style
-    .hide(axis="index")
-    .set_properties(**{"text-align": "left"})
-    .set_table_styles([
-    {"selector": "th", "props": [("text-align", "left"),
-                                 ("background", "#0b1220"),
-                                 ("color", "white"),
-                                 ("padding", "8px 10px")]},
-        {"selector": "td", "props": [("padding", "8px 10px")]}
+# Best-feature compact table (robust)
+bf_disp = (
+    best_feature_df
+      .copy()
+      .rename(columns={"best_feature": "Feature", "best_accuracy": "Accuracy"})
+)
+
+# Ensure numeric dtype for bar styling
+bf_disp["Accuracy"] = pd.to_numeric(bf_disp["Accuracy"], errors="coerce")
+
+try:
+    bf_sty = (
+        bf_disp.style
+        .hide(axis="index")
+        .set_properties(**{"text-align": "left"})
+        .set_table_styles([
+            {"selector": "th", "props": [
+                ("text-align", "left"),
+                ("background", "#0b1220"),
+                ("color", "white"),
+                ("padding", "8px 10px")
+            ]},
+            {"selector": "td", "props": [("padding", "8px 10px")]}
         ])
-    .bar(subset=["Accuracy"], color="#66b3ff", vmin=0, vmax=1)
+        .format({"Accuracy": "{:.3f}"})
+        .bar(subset=["Accuracy"], color="#66b3ff", vmin=0, vmax=1)
     )
-st.dataframe(bf_sty, use_container_width=True)
+    # Newer Streamlit versions support Styler in st.dataframe; if not, the except will catch it
+    st.dataframe(bf_sty, use_container_width=True)
+except Exception:
+    # Fallback: plain DataFrame (still formatted)
+    st.dataframe(bf_disp.round({"Accuracy": 3}), use_container_width=True)
+
 
 # ---------- Full ranking (Feature • Accuracy) ----------
 rank_df = pd.DataFrame({"feature": used_features, "accuracy": accuracies})
