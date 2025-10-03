@@ -3,7 +3,8 @@
 ## 📖 Overview
 This project analyzes a car insurance dataset to identify which **single feature** is the best predictor of whether a client will file an insurance claim.  
 Instead of building a complex machine learning pipeline, the focus is on **logistic regression models for each feature individually**, ranked by accuracy. This makes the findings simple, explainable, and actionable for business stakeholders.
-https://car-insurance-claims-5mids4f6bqvp6ubwwwwbri.streamlit.app/
+
+🔗 [Live Streamlit App](https://car-insurance-claims-5mids4f6bqvp6ubwwwwbri.streamlit.app/)
 
 ## ❓ Problem Statement
 Insurance companies need to evaluate client risk quickly and accurately. Deploying complex machine learning models can be expensive, hard to monitor, and not always transparent.  
@@ -47,9 +48,6 @@ Key columns include:
 - A **ranking table and bar chart** are included in the Streamlit app to explore all features by accuracy.  
 
 📷 **Results Preview**  
-![Best Feature Card](images/best_feature.png)  
-*Best feature identified with accuracy score.*  
-
 ![Feature Ranking Table](images/ranking_table.png)  
 *All features ranked by accuracy in a styled table.*  
 
