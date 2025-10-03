@@ -1,33 +1,32 @@
-# app.py — Context • Objective • Data • Actions • Observations • Results (Auto best single feature by accuracy)
+# app.py — Best Single Feature by Accuracy (Logistic Regression, full data, no target detection)
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-# Viz & ML
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import accuracy_score
 
-# ------------------------------------------------------------------------------
-# Page setup
-# ------------------------------------------------------------------------------
-st.set_page_config(page_title="Project Report", page_icon="📑", layout="wide")
-st.title("📑 Project Report")
-st.caption("Context • Objective • About the Data • Actions • Observations • Results")
+# -----------------------------
+# Settings
+# -----------------------------
+st.set_page_config(page_title="Car Insurance — Best Feature", page_icon="🚗", layout="wide")
+st.title("🚗 Car Insurance — Best Single Feature (Accuracy)")
+st.caption("Context • Objective • Data • Actions • Observations • Results")
 
-# ------------------------------------------------------------------------------
-# Load data (fixed path with fallback to uploader)
-# ------------------------------------------------------------------------------
-DATA_PATH = Path("data/car_insurance.csv")  # change if your file lives elsewhere
+DATA_PATH = Path("data/car_insurance.csv")
+TARGET_COL = "Response"  # <-- set this to your Colab target column (no auto-detection)
 
+# -----------------------------
+# Load data
+# -----------------------------
 @st.cache_data(show_spinner=False)
 def read_csv_forgiving(src):
-    """Try common CSV read variants to survive odd delimiters/encodings."""
     try:
         return pd.read_csv(src)
     except Exception:
@@ -43,42 +42,28 @@ def load_data():
     else:
         up = st.file_uploader("Upload a CSV", type=["csv"])
         if not up:
-            st.info("Add a dataset at `data/...csv` or upload a CSV to proceed.")
+            st.info("Add `data/car_insurance.csv` or upload your dataset to proceed.")
             st.stop()
         df = read_csv_forgiving(up)
         src = "uploaded file"
-    # normalize headers
     df.columns = df.columns.str.strip().str.replace(r"\s+", "_", regex=True)
     return df, src
 
 df, src = load_data()
-st.success(f"Dataset loaded from {src}")
+st.success(f"Loaded dataset from {src}")
 
-# ------------------------------------------------------------------------------
-# Context
-# ------------------------------------------------------------------------------
+# -----------------------------
+# Context & Objective
+# -----------------------------
 st.header("Context")
-st.markdown(
-    """
-Organizations need clear visibility into customer behaviors and drivers to make targeted, high-impact decisions.
-This project turns raw data into structured insights that can inform marketing, risk, and operations.
-"""
-)
+st.markdown("Identify which **single feature** best predicts the target in a car insurance dataset.")
 
-# ------------------------------------------------------------------------------
-# Objective
-# ------------------------------------------------------------------------------
 st.header("Objective")
-st.markdown(
-    """
-Identify the **single most predictive feature** for a **binary target** using **Logistic Regression** on the **full dataset**
-(no train/test split). Report **Accuracy** (primary) and **ROC AUC** when applicable.
-"""
-)
+st.markdown("Fit **Logistic Regression on full data** (no train/test) per-feature and choose the **best by Accuracy**.")
 
-# ------------------------------------------------------------------------------
+# -----------------------------
 # About the Data
-# ------------------------------------------------------------------------------
+# -----------------------------
 st.header("About the Data")
 c0, c1 = st.columns([2, 1])
 with c0:
@@ -90,52 +75,46 @@ with c1:
     st.metric("Columns", df.shape[1])
     st.metric("Overall Missing %", f"{(df.isna().mean().mean()*100):.2f}%")
 
-numeric_all = df.select_dtypes(include=[np.number]).columns.tolist()
+num_cols_all = df.select_dtypes(include=[np.number]).columns.tolist()
 st.subheader("Summary (Numeric Features)")
-if numeric_all:
-    desc = df[numeric_all].agg(["count","mean","median","std","min","max"]).T
-    q = df[numeric_all].quantile([0.25,0.75])
+if num_cols_all:
+    desc = df[num_cols_all].agg(["count","mean","median","std","min","max"]).T
+    q = df[num_cols_all].quantile([0.25,0.75])
     desc["q1"] = q.loc[0.25].values
     desc["q3"] = q.loc[0.75].values
     desc["iqr"] = desc["q3"] - desc["q1"]
-    desc["missing_%"] = (df[numeric_all].isna().mean()*100).values
+    desc["missing_%"] = (df[num_cols_all].isna().mean()*100).values
     st.dataframe(desc[["count","mean","median","std","min","q1","q3","iqr","max","missing_%"]].round(3),
                  use_container_width=True)
 else:
     st.info("No numeric columns found.")
 
-# ------------------------------------------------------------------------------
+# -----------------------------
 # Actions — Data Preparation
-# ------------------------------------------------------------------------------
+# -----------------------------
 st.header("Actions — Data Preparation")
-st.markdown(
-    """
-**Steps performed**
-1. Header normalization (trim, underscores).  
+st.markdown("""
+1. Normalize headers (trim, underscores).  
 2. Drop exact duplicate rows.  
-3. Identify numeric vs categorical features.  
-4. For each candidate single feature:  
+3. For each single feature:  
    - Numeric → `StandardScaler`  
    - Categorical → `OneHotEncoder(handle_unknown="ignore")`  
-   - Model → `LogisticRegression(max_iter=1000)` fit on **full data** (resubstitution).
-"""
-)
+   - Model → `LogisticRegression(max_iter=1000)` on **full data** (resubstitution).
+""")
 before = len(df)
-df_clean = df[~df.uplicated()].copy() if hasattr(df, "uplicated") else df[~df.duplicated()].copy()
-after = len(df_clean)
-st.caption(f"Removed {before - after} duplicate rows (kept {after}).")
+df_clean = df.drop_duplicates().copy()
+st.caption(f"Removed {before - len(df_clean)} duplicate rows.")
 
-# ------------------------------------------------------------------------------
+# -----------------------------
 # Observations (light)
-# ------------------------------------------------------------------------------
+# -----------------------------
 st.header("Observations")
 obs = []
-if numeric_all:
-    skew_s = df_clean[numeric_all].skew(numeric_only=True).sort_values(ascending=False)
-    right_skewed = [f"{c} (skew={v:.2f})" for c, v in skew_s.head(3).items() if v > 1.0]
-    if right_skewed:
-        obs.append("Right-skew detected: " + ", ".join(right_skewed) + ".")
-for col in numeric_all[:5]:
+if num_cols_all:
+    skew = df_clean[num_cols_all].skew(numeric_only=True).sort_values(ascending=False)
+    skewed = [f"{c} (skew={v:.2f})" for c, v in skew.head(3).items() if v > 1.0]
+    if skewed: obs.append("Right-skew detected: " + ", ".join(skewed) + ".")
+for col in num_cols_all[:5]:
     s = df_clean[col].dropna()
     if len(s) > 0:
         q1, q3 = s.quantile(0.25), s.quantile(0.75)
@@ -143,107 +122,79 @@ for col in numeric_all[:5]:
 for o in (obs or ["- No notable skew/range signals detected."]):
     st.markdown(f"- {o}")
 
-# ------------------------------------------------------------------------------
-# Results — Auto best feature by Accuracy (no UI selections, no split)
-# ------------------------------------------------------------------------------
+# -----------------------------
+# Results — Best Single Feature by Accuracy
+# -----------------------------
 st.header("Results — Best Single Feature (Accuracy)")
 
-# 1) Auto-detect a binary target
-common_targets = ["target","label","claim","claim_status","made_claim","fraud_flag","is_fraud","fraud_found"]
-binary_cols = [c for c in df_clean.columns if df_clean[c].dropna().nunique() == 2]
-
-target_col = None
-# Prefer common names that are binary
-for c in df_clean.columns:
-    if c.lower() in common_targets and c in binary_cols:
-        target_col = c
-        break
-# Otherwise pick the first binary column (not obviously an ID)
-if target_col is None and binary_cols:
-    # deprioritize columns that look like identifiers
-    id_like = {"id","sl_no","slno","customer_key","customerid","customer_id"}
-    sorted_bins = sorted(binary_cols, key=lambda x: (x.lower() in id_like, df_clean.columns.get_loc(x)))
-    target_col = sorted_bins[0]
-
-if target_col is None:
-    st.error("No binary target column found. Please include a binary target (e.g., claim, fraud_flag).")
+if TARGET_COL not in df_clean.columns:
+    st.error(f"Target column `{TARGET_COL}` not found. Set `TARGET_COL` near the top of app.py to your Colab target.")
     st.stop()
 
-st.markdown(f"**Detected target:** `{target_col}` (binary)")
+y = df_clean[TARGET_COL].dropna()
+X = df_clean.loc[y.index].drop(columns=[TARGET_COL])
 
-y = df_clean[target_col].dropna()
-X_full = df_clean.loc[y.index].drop(columns=[target_col])
-
-# Remove columns that are entirely missing or constant
+# drop constant/empty columns
 def is_constant(s: pd.Series) -> bool:
     s_non_null = s.dropna()
     return s_non_null.nunique() <= 1
 
-valid_features = [c for c in X_full.columns if not is_constant(X_full[c])]
+features = [c for c in X.columns if not is_constant(X[c])]
 
-if not valid_features:
+if not features:
     st.error("No valid feature columns available after cleaning.")
     st.stop()
 
-# Split types
-num_cols = X_full[valid_features].select_dtypes(include=[np.number]).columns.tolist()
-cat_cols = [c for c in valid_features if c not in num_cols]
+num_cols = X[features].select_dtypes(include=[np.number]).columns.tolist()
+cat_cols = [c for c in features if c not in num_cols]
 
-# 2) Evaluate each feature (fit on full data; predict on full data)
-results = []
-for feat in valid_features:
-    Xi = X_full[[feat]]
+def eval_feature(feat: str):
+    Xi = X[[feat]]
     if feat in num_cols:
         pre = ColumnTransformer([("num", StandardScaler(), [feat])], remainder="drop")
     else:
         pre = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore"), [feat])], remainder="drop")
     pipe = Pipeline([("preprocess", pre), ("clf", LogisticRegression(max_iter=1000))])
+    pipe.fit(Xi, y)
+    y_pred = pipe.predict(Xi)
+    return accuracy_score(y, y_pred)
 
+results = []
+for f in features:
     try:
-        pipe.fit(Xi, y)
-        y_pred = pipe.predict(Xi)
-        acc = accuracy_score(y, y_pred)
-        auc = np.nan
-        # AUC only if proba exists (binary)
-        try:
-            y_prob = pipe.predict_proba(Xi)[:, 1]
-            auc = roc_auc_score(y, y_prob)
-        except Exception:
-            pass
-        results.append({"feature": feat, "type": "numeric" if feat in num_cols else "categorical",
-                        "accuracy": acc, "auc": auc})
+        acc = eval_feature(f)
+        results.append({"feature": f, "type": "numeric" if f in num_cols else "categorical", "accuracy": acc})
     except Exception:
-        results.append({"feature": feat, "type": "error", "accuracy": np.nan, "auc": np.nan})
+        results.append({"feature": f, "type": "error", "accuracy": np.nan})
 
-res_df = pd.DataFrame(results)
+res_df = pd.DataFrame(results).sort_values("accuracy", ascending=False).reset_index(drop=True)
+
 if res_df.empty or res_df["accuracy"].isna().all():
-    st.error("Unable to compute accuracy for any feature. Check data types and target.")
+    st.error("Unable to compute accuracy for any feature. Check target and feature columns.")
     st.stop()
-
-# Rank by accuracy, tie-breaker by AUC
-res_df = res_df.sort_values(by=["accuracy", "auc"], ascending=[False, False]).reset_index(drop=True)
 
 best = res_df.iloc[0]
 st.subheader("Best Feature")
 st.markdown(
     f"- **Feature:** `{best['feature']}`  \n"
     f"- **Type:** {best['type']}  \n"
-    f"- **Accuracy:** **{best['accuracy']:.3f}**  \n"
-    f"- **ROC AUC:** {'' if np.isnan(best['auc']) else f'{best['auc']:.3f}'}"
+    f"- **Accuracy:** **{best['accuracy']:.3f}**"
 )
 
+# Ranked table
 st.subheader("All Features — Ranked by Accuracy")
-disp = res_df.copy().round({"accuracy": 3, "auc": 3})
-styler = (
-    disp.style
-    .bar(subset=["accuracy"], color="#76b7ff")
-    .background_gradient(subset=["auc"], cmap="Greens")
-    .hide(axis="index")
-)
+disp = res_df.copy().round({"accuracy": 3})
+styler = disp.style.bar(subset=["accuracy"], color="#76b7ff").hide(axis="index")
 st.dataframe(styler, use_container_width=True)
 
-# ------------------------------------------------------------------------------
-# Footer
-# ------------------------------------------------------------------------------
+# Optional: small bar chart of top N
+top_n = min(10, len(disp))
+fig, ax = plt.subplots(figsize=(7, max(3, int(top_n*0.4))))
+plot_df = disp.head(top_n).sort_values("accuracy")
+ax.barh(plot_df["feature"], plot_df["accuracy"])
+ax.set_xlabel("Accuracy")
+ax.set_ylabel("")
+st.pyplot(fig)
+
 st.markdown("---")
-st.caption("Logistic Regression on full data (resubstitution). No user selections; best single feature auto-identified by Accuracy.")
+st.caption("Full-data (resubstitution) Logistic Regression. Adjust TARGET_COL to match your Colab target.")
